@@ -4,10 +4,10 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/ptypes"
-	durpb "github.com/golang/protobuf/ptypes/duration"
-	tspb "github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/golang/protobuf/ptypes/duration"
+	tpb "github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	pb "github.com/tektoncd/results/proto/pipeline/v1beta1/pipeline_go_proto"
+	ppb "github.com/tektoncd/results/proto/pipeline/v1beta1/pipeline_go_proto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/apis"
@@ -48,39 +48,37 @@ var (
 			Timeout: &metav1.Duration{Duration: time.Hour},
 			TaskSpec: &v1beta1.TaskSpec{
 				Steps: []v1beta1.Step{{
-					Script: "script",
-					Container: corev1.Container{
-						Name:       "name",
-						Image:      "image",
-						Command:    []string{"cmd1", "cmd2"},
-						Args:       []string{"arg1", "arg2"},
-						WorkingDir: "workingdir",
-						Env: []corev1.EnvVar{{
-							Name:  "env1",
-							Value: "ENV1",
-						}, {
-							Name:  "env2",
-							Value: "ENV2",
-						}},
-						VolumeMounts: []corev1.VolumeMount{{
-							Name:      "vm1",
-							MountPath: "path1",
-							ReadOnly:  false,
-							SubPath:   "subpath1",
-						}, {
-							Name:      "vm2",
-							MountPath: "path2",
-							ReadOnly:  true,
-							SubPath:   "subpath2",
-						}},
-					},
+					Script:     "script",
+					Name:       "name",
+					Image:      "image",
+					Command:    []string{"cmd1", "cmd2"},
+					Args:       []string{"arg1", "arg2"},
+					WorkingDir: "workingdir",
+					Env: []corev1.EnvVar{{
+						Name:  "env1",
+						Value: "ENV1",
+					}, {
+						Name:  "env2",
+						Value: "ENV2",
+					}},
+					VolumeMounts: []corev1.VolumeMount{{
+						Name:      "vm1",
+						MountPath: "path1",
+						ReadOnly:  false,
+						SubPath:   "subpath1",
+					}, {
+						Name:      "vm2",
+						MountPath: "path2",
+						ReadOnly:  true,
+						SubPath:   "subpath2",
+					}},
 				}, {
-					Container: corev1.Container{Name: "step2"},
+					Name: "step2",
 				}},
 				Sidecars: []v1beta1.Sidecar{{
-					Container: corev1.Container{Name: "sidecar1"},
+					Name: "sidecar1",
 				}, {
-					Container: corev1.Container{Name: "sidecar2"},
+					Name: "sidecar2",
 				}},
 				Volumes: []corev1.Volume{{
 					Name:         "volname1",
@@ -130,10 +128,10 @@ var (
 			},
 		},
 	}
-	taskrunpb = &pb.TaskRun{
+	taskrunpb = &ppb.TaskRun{
 		ApiVersion: "tekton.dev/v1beta1",
 		Kind:       "TaskRun",
-		Metadata: &pb.ObjectMeta{
+		Metadata: &ppb.ObjectMeta{
 			Name:              "name",
 			GenerateName:      "generate-name",
 			Namespace:         "namespace",
@@ -150,24 +148,24 @@ var (
 				"annotation-two": "two",
 			},
 		},
-		Spec: &pb.TaskRunSpec{
-			Timeout: &durpb.Duration{Seconds: 3600},
-			TaskSpec: &pb.TaskSpec{
-				Steps: []*pb.Step{{
+		Spec: &ppb.TaskRunSpec{
+			Timeout: &duration.Duration{Seconds: 3600},
+			TaskSpec: &ppb.TaskSpec{
+				Steps: []*ppb.Step{{
 					Script:     "script",
 					Name:       "name",
 					Image:      "image",
 					Command:    []string{"cmd1", "cmd2"},
 					Args:       []string{"arg1", "arg2"},
 					WorkingDir: "workingdir",
-					Env: []*pb.EnvVar{{
+					Env: []*ppb.EnvVar{{
 						Name:  "env1",
 						Value: "ENV1",
 					}, {
 						Name:  "env2",
 						Value: "ENV2",
 					}},
-					VolumeMounts: []*pb.VolumeMount{{
+					VolumeMounts: []*ppb.VolumeMount{{
 						Name:      "vm1",
 						MountPath: "path1",
 						ReadOnly:  false,
@@ -181,22 +179,22 @@ var (
 				}, {
 					Name: "step2",
 				}},
-				Sidecars: []*pb.Step{{
+				Sidecars: []*ppb.Step{{
 					Name: "sidecar1",
 				}, {
 					Name: "sidecar2",
 				}},
-				Volumes: []*pb.Volume{{
+				Volumes: []*ppb.Volume{{
 					Name:   "volname1",
-					Source: &pb.Volume_EmptyDir{EmptyDir: &pb.EmptyDir{}},
+					Source: &ppb.Volume_EmptyDir{EmptyDir: &ppb.EmptyDir{}},
 				}, {
 					Name:   "volname2",
-					Source: &pb.Volume_EmptyDir{EmptyDir: &pb.EmptyDir{}},
+					Source: &ppb.Volume_EmptyDir{EmptyDir: &ppb.EmptyDir{}},
 				}},
 			},
 		},
-		Status: &pb.TaskRunStatus{
-			Conditions: []*pb.Condition{{
+		Status: &ppb.TaskRunStatus{
+			Conditions: []*ppb.Condition{{
 				Type:               "type",
 				Status:             "status",
 				Severity:           "omgbad",
@@ -210,8 +208,8 @@ var (
 			PodName:            "podname",
 			StartTime:          timestamp(&start),
 			CompletionTime:     timestamp(&finish),
-			Steps: []*pb.StepState{{
-				Status: &pb.StepState_Terminated{Terminated: &pb.ContainerStateTerminated{
+			Steps: []*ppb.StepState{{
+				Status: &ppb.StepState_Terminated{Terminated: &ppb.ContainerStateTerminated{
 					ExitCode:    123,
 					Signal:      456,
 					Reason:      "reason",
@@ -269,32 +267,30 @@ var (
 						},
 						TaskSpec: v1beta1.TaskSpec{
 							Steps: []v1beta1.Step{{
-								Script: "script",
-								Container: corev1.Container{
-									Name:       "name",
-									Image:      "image",
-									Command:    []string{"cmd1", "cmd2"},
-									Args:       []string{"arg1", "arg2"},
-									WorkingDir: "workingdir",
-									Env: []corev1.EnvVar{{
-										Name:  "env1",
-										Value: "ENV1",
-									}, {
-										Name:  "env2",
-										Value: "ENV2",
-									}},
-									VolumeMounts: []corev1.VolumeMount{{
-										Name:      "vm1",
-										MountPath: "path1",
-										ReadOnly:  false,
-										SubPath:   "subpath1",
-									}, {
-										Name:      "vm2",
-										MountPath: "path2",
-										ReadOnly:  true,
-										SubPath:   "subpath2",
-									}},
-								},
+								Script:     "script",
+								Name:       "name",
+								Image:      "image",
+								Command:    []string{"cmd1", "cmd2"},
+								Args:       []string{"arg1", "arg2"},
+								WorkingDir: "workingdir",
+								Env: []corev1.EnvVar{{
+									Name:  "env1",
+									Value: "ENV1",
+								}, {
+									Name:  "env2",
+									Value: "ENV2",
+								}},
+								VolumeMounts: []corev1.VolumeMount{{
+									Name:      "vm1",
+									MountPath: "path1",
+									ReadOnly:  false,
+									SubPath:   "subpath1",
+								}, {
+									Name:      "vm2",
+									MountPath: "path2",
+									ReadOnly:  true,
+									SubPath:   "subpath2",
+								}},
 							}},
 							Sidecars: []v1beta1.Sidecar{{}},
 							Volumes: []corev1.Volume{{
@@ -332,21 +328,21 @@ var (
 			},
 		},
 	}
-	pipelinerunpb = &pb.PipelineRun{
+	pipelinerunpb = &ppb.PipelineRun{
 		ApiVersion: "tekton.dev/v1beta1",
 		Kind:       "PipelineRun",
-		Spec: &pb.PipelineRunSpec{
-			Timeout: &durpb.Duration{Seconds: 3600},
-			PipelineSpec: &pb.PipelineSpec{
-				Tasks: []*pb.PipelineTask{{
+		Spec: &ppb.PipelineRunSpec{
+			Timeout: &duration.Duration{Seconds: 3600},
+			PipelineSpec: &ppb.PipelineSpec{
+				Tasks: []*ppb.PipelineTask{{
 					Name: "ptask",
-					TaskRef: &pb.TaskRef{
+					TaskRef: &ppb.TaskRef{
 						Name:       "ptask",
 						Kind:       "kind",
 						ApiVersion: "api_version",
 					},
-					TaskSpec: &pb.EmbeddedTask{
-						Metadata: &pb.PipelineTaskMetadata{
+					TaskSpec: &ppb.EmbeddedTask{
+						Metadata: &ppb.PipelineTaskMetadata{
 							Labels: map[string]string{
 								"label-one": "one",
 							},
@@ -354,21 +350,21 @@ var (
 								"ann-one": "one",
 							},
 						},
-						Steps: []*pb.Step{{
+						Steps: []*ppb.Step{{
 							Script:     "script",
 							Name:       "name",
 							Image:      "image",
 							Command:    []string{"cmd1", "cmd2"},
 							Args:       []string{"arg1", "arg2"},
 							WorkingDir: "workingdir",
-							Env: []*pb.EnvVar{{
+							Env: []*ppb.EnvVar{{
 								Name:  "env1",
 								Value: "ENV1",
 							}, {
 								Name:  "env2",
 								Value: "ENV2",
 							}},
-							VolumeMounts: []*pb.VolumeMount{{
+							VolumeMounts: []*ppb.VolumeMount{{
 								Name:      "vm1",
 								MountPath: "path1",
 								ReadOnly:  false,
@@ -380,37 +376,37 @@ var (
 								SubPath:   "subpath2",
 							}},
 						}},
-						Sidecars: []*pb.Step{{}},
-						Volumes: []*pb.Volume{{
+						Sidecars: []*ppb.Step{{}},
+						Volumes: []*ppb.Volume{{
 							Name:   "volname1",
-							Source: &pb.Volume_EmptyDir{EmptyDir: &pb.EmptyDir{}},
+							Source: &ppb.Volume_EmptyDir{EmptyDir: &ppb.EmptyDir{}},
 						}},
 					},
-					Timeout: &durpb.Duration{Seconds: 3600},
+					Timeout: &duration.Duration{Seconds: 3600},
 				}},
-				Results: []*pb.PipelineResult{{
+				Results: []*ppb.PipelineResult{{
 					Name:        "result",
 					Description: "desc",
 					Value:       "value",
 				}},
-				Finally: []*pb.PipelineTask{{}},
+				Finally: []*ppb.PipelineTask{{}},
 			},
 		},
-		Status: &pb.PipelineRunStatus{
+		Status: &ppb.PipelineRunStatus{
 			ObservedGeneration: 12345,
-			Conditions:         []*pb.Condition{{}},
+			Conditions:         []*ppb.Condition{{}},
 			Annotations: map[string]string{
 				"ann-one": "one",
 			},
-			TaskRuns: map[string]*pb.PipelineRunTaskRunStatus{
+			TaskRuns: map[string]*ppb.PipelineRunTaskRunStatus{
 				"task": {
 					PipelineTaskName: "pipelineTaskName",
-					Status:           &pb.TaskRunStatus{},
+					Status:           &ppb.TaskRunStatus{},
 				},
 			},
-			PipelineSpec: &pb.PipelineSpec{},
+			PipelineSpec: &ppb.PipelineSpec{},
 		},
-		Metadata: &pb.ObjectMeta{
+		Metadata: &ppb.ObjectMeta{
 			Name:              "test-pipeline",
 			GenerateName:      "test-pipeline-",
 			Namespace:         "namespace",
@@ -428,7 +424,7 @@ var (
 	}
 )
 
-func timestamp(t *metav1.Time) *tspb.Timestamp {
+func timestamp(t *metav1.Time) *tpb.Timestamp {
 	if t == nil {
 		return nil
 	}

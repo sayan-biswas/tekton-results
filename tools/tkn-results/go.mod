@@ -1,6 +1,6 @@
 module github.com/tektoncd/results/tools/tkn-results
 
-go 1.17
+go 1.18
 
 require (
 	github.com/google/go-cmp v0.5.6
@@ -45,7 +45,6 @@ require (
 	github.com/pelletier/go-toml v1.9.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
-	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
 	github.com/spf13/afero v1.6.0 // indirect
 	github.com/spf13/cast v1.4.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect

@@ -16,12 +16,12 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	"github.com/tektoncd/results/pkg/api/server/db"
-	server "github.com/tektoncd/results/pkg/api/server/v1alpha2"
-	"github.com/tektoncd/results/pkg/api/server/v1alpha2/record"
-	"github.com/tektoncd/results/pkg/api/server/v1alpha2/result"
+	"github.com/tektoncd/results/pkg/server/api/v1alpha2/record"
+	"github.com/tektoncd/results/pkg/server/api/v1alpha2/result"
+	"github.com/tektoncd/results/pkg/server/api/v1alpha2/server"
+	"github.com/tektoncd/results/pkg/server/db/models"
 	"github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
-	pb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	rpb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -38,7 +38,7 @@ func TestMigrate(t *testing.T) {
 		log.Fatalf("failed to open the mysql db: %v", err)
 	}
 
-	if err := clearDB(mysqldb, &db.Result{}); err != nil {
+	if err := clearDB(mysqldb, &models.Result{}); err != nil {
 		t.Fatalf("error clearing MySQL Results: %v", err)
 	}
 
@@ -46,17 +46,17 @@ func TestMigrate(t *testing.T) {
 	if err != nil {
 		log.Fatalf("failed to open the postgres db: %v", err)
 	}
-	if err := clearDB(postgres, &db.Result{}); err != nil {
+	if err := clearDB(postgres, &models.Result{}); err != nil {
 		t.Fatalf("error clearing MySQL Results: %v", err)
 	}
 
 	// Prepopulate Results
-	results := []*db.Result{
+	results := []*models.Result{
 		{
 			Parent: parent,
 			Name:   "not-migrated",
 			ID:     id(),
-			Annotations: db.Annotations{
+			Annotations: models.Annotations{
 				"d": "e",
 			},
 			CreatedTime: time.Unix(1234567890, 0),
@@ -110,7 +110,7 @@ func TestMigrate(t *testing.T) {
 				Parent:     results[i].Parent,
 				ResultName: results[i].Name,
 				ResultID:   results[i].ID,
-				Result: db.Result{
+				Result: models.Result{
 					Parent: results[i].Parent,
 					Name:   results[i].Name,
 					ID:     results[i].ID,
@@ -133,9 +133,9 @@ func TestMigrate(t *testing.T) {
 
 	// Populate existing postgres records - adjusted for proto -> json type
 	// conversion.
-	var outRecords []*db.Record
+	var outRecords []*models.Record
 	for _, r := range inRecords {
-		out := &db.Record{
+		out := &models.Record{
 			Parent:     r.Parent,
 			ResultName: r.ResultName,
 			ResultID:   r.ResultID,
@@ -254,7 +254,7 @@ func TestMigrate(t *testing.T) {
 			sort.Slice(got, func(i, j int) bool {
 				return got[i].GetId() < got[j].GetId()
 			})
-			want := make([]*pb.Result, 0, len(results))
+			want := make([]*rpb.Result, 0, len(results))
 			for _, r := range results {
 				want = append(want, result.ToAPI(r))
 			}
@@ -275,7 +275,7 @@ func TestMigrate(t *testing.T) {
 				return got[i].GetId() < got[j].GetId()
 			})
 
-			want := make([]*pb.Record, 0, len(outRecords))
+			want := make([]*rpb.Record, 0, len(outRecords))
 			for _, r := range outRecords {
 				api, err := record.ToAPI(r)
 				if err != nil {
@@ -285,7 +285,7 @@ func TestMigrate(t *testing.T) {
 			}
 			// Ignore the data value for now - we can't guarantee the field
 			// ordering so we need to inspect this separately.
-			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&pb.Any{}, "value")); diff != "" {
+			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&rpb.Any{}, "value")); diff != "" {
 				t.Errorf("Records: %s", diff)
 			}
 			// Verify data values.

@@ -55,7 +55,7 @@ service Results {
 
   rpc ListResults(ListResultsRequest) returns (ListResultsResponse) {
     option (google.api.http) = {
-      get: "/v1alpha2/{parent=*}/results"
+      get: "/v1alpha2/{cluster=*}/{parent=*}/results"
     };
   }
 
@@ -81,7 +81,7 @@ service Results {
 
   rpc ListRecords(ListRecordsRequest) returns (ListRecordsResponse) {
     option (google.api.http) = {
-      get: "/v1alpha2/{parent=*/results/*}/records"
+      get: "/v1alpha2/{cluster=*}/{parent=*/results/*}/records"
     };
   }
 
@@ -119,12 +119,11 @@ message GetResultRequest {
 
 message ListResultsRequest {
   string parent = 1;
-
-  string filter = 2;
-
-  int32 page_size = 3;
-  string page_token = 4;
-  string order_by = 5;
+  string cluster = 2;
+  string filter = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+  string order_by = 6;
 }
 
 message ListResultsResponse {
@@ -162,12 +161,11 @@ message GetRecordRequest {
 
 message ListRecordsRequest {
   string parent = 1;
-
-  string filter = 2;
-
-  int32 page_size = 3;
-  string page_token = 4;
-  string order_by = 5;
+  string cluster = 2;
+  string filter = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+  string order_by = 6;
 }
 
 message ListRecordsResponse {

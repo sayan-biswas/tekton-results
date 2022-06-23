@@ -21,11 +21,11 @@ import (
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/tektoncd/results/pkg/api/server/v1alpha2/record"
-	"github.com/tektoncd/results/pkg/api/server/v1alpha2/result"
+	"github.com/tektoncd/results/pkg/server/api/v1alpha2/record"
+	"github.com/tektoncd/results/pkg/server/api/v1alpha2/result"
 	"github.com/tektoncd/results/pkg/watcher/convert"
 	"github.com/tektoncd/results/pkg/watcher/reconciler/annotation"
-	pb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	rpb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -41,11 +41,11 @@ import (
 // for performing result operations that require multiple RPCs or data specific
 // operations.
 type Client struct {
-	pb.ResultsClient
+	rpb.ResultsClient
 }
 
 // NewClient returns a new results client for the particular kind.
-func NewClient(client pb.ResultsClient) *Client {
+func NewClient(client rpb.ResultsClient) *Client {
 	return &Client{
 		ResultsClient: client,
 	}
@@ -70,7 +70,7 @@ type StatusConditionGetter interface {
 // result, one is created automatically.
 // If the Object is already associated with a Record, the existing Record is
 // updated - otherwise a new Record is created.
-func (c *Client) Put(ctx context.Context, o Object, opts ...grpc.CallOption) (*pb.Result, *pb.Record, error) {
+func (c *Client) Put(ctx context.Context, o Object, opts ...grpc.CallOption) (*rpb.Result, *rpb.Record, error) {
 	// Make sure parent Result exists (or create one)
 	result, err := c.ensureResult(ctx, o, opts...)
 	if err != nil {
@@ -88,20 +88,20 @@ func (c *Client) Put(ctx context.Context, o Object, opts ...grpc.CallOption) (*p
 
 // ensureResult gets the Result corresponding to the Object, creates a new
 // one, or updates the existing Result with new Object details if necessary.
-func (c *Client) ensureResult(ctx context.Context, o Object, opts ...grpc.CallOption) (*pb.Result, error) {
+func (c *Client) ensureResult(ctx context.Context, o Object, opts ...grpc.CallOption) (*rpb.Result, error) {
 	name := resultName(o)
-	curr, err := c.ResultsClient.GetResult(ctx, &pb.GetResultRequest{Name: name}, opts...)
+	curr, err := c.ResultsClient.GetResult(ctx, &rpb.GetResultRequest{Name: name}, opts...)
 	if err != nil && status.Code(err) != codes.NotFound {
 		return nil, status.Errorf(status.Code(err), "GetResult(%s): %v", name, err)
 	}
 
-	new := &pb.Result{
+	new := &rpb.Result{
 		Name: name,
 	}
 	topLevel := isTopLevelRecord(o)
 	if topLevel {
 		// If the object corresponds to a top level record  - include a RecordSummary.
-		new.Summary = &pb.RecordSummary{
+		new.Summary = &rpb.RecordSummary{
 			Record:    recordName(name, o),
 			Type:      convert.TypeName(o),
 			Status:    convert.Status(o.GetStatusCondition()),
@@ -114,7 +114,7 @@ func (c *Client) ensureResult(ctx context.Context, o Object, opts ...grpc.CallOp
 	// if the Result doesn't exist yet just create it and return.
 	if status.Code(err) == codes.NotFound {
 		// Result doesn't exist yet - create.
-		req := &pb.CreateResultRequest{
+		req := &rpb.CreateResultRequest{
 			Parent: o.GetNamespace(),
 			Result: new,
 		}
@@ -137,7 +137,7 @@ func (c *Client) ensureResult(ctx context.Context, o Object, opts ...grpc.CallOp
 		// No differences, nothing to do.
 		return curr, nil
 	}
-	req := &pb.UpdateResultRequest{
+	req := &rpb.UpdateResultRequest{
 		Name:   name,
 		Result: new,
 	}
@@ -193,7 +193,7 @@ func recordName(parent string, o Object) string {
 
 // upsertRecord updates or creates a record for the object. If there has been
 // no change in the Record data, the existing Record is returned.
-func (c *Client) upsertRecord(ctx context.Context, parent string, o Object, opts ...grpc.CallOption) (*pb.Record, error) {
+func (c *Client) upsertRecord(ctx context.Context, parent string, o Object, opts ...grpc.CallOption) (*rpb.Record, error) {
 	name, ok := o.GetAnnotations()[annotation.Record]
 	if !ok {
 		name = record.FormatName(parent, defaultName(o))
@@ -203,7 +203,7 @@ func (c *Client) upsertRecord(ctx context.Context, parent string, o Object, opts
 		return nil, err
 	}
 
-	curr, err := c.GetRecord(ctx, &pb.GetRecordRequest{Name: name}, opts...)
+	curr, err := c.GetRecord(ctx, &rpb.GetRecordRequest{Name: name}, opts...)
 	if err != nil && status.Code(err) != codes.NotFound {
 		return nil, err
 	}
@@ -231,16 +231,16 @@ func (c *Client) upsertRecord(ctx context.Context, parent string, o Object, opts
 			return curr, nil
 		}
 		curr.Data = data
-		return c.UpdateRecord(ctx, &pb.UpdateRecordRequest{
+		return c.UpdateRecord(ctx, &rpb.UpdateRecordRequest{
 			Record: curr,
 			Etag:   curr.GetEtag(),
 		}, opts...)
 	}
 
 	// Data does not exist for the Record - create it.
-	return c.CreateRecord(ctx, &pb.CreateRecordRequest{
+	return c.CreateRecord(ctx, &rpb.CreateRecordRequest{
 		Parent: parent,
-		Record: &pb.Record{
+		Record: &rpb.Record{
 			Name: name,
 			Data: data,
 		},

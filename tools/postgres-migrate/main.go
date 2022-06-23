@@ -13,7 +13,7 @@ import (
 
 	"github.com/jackc/pgconn"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	"github.com/tektoncd/results/pkg/api/server/db"
+	"github.com/tektoncd/results/pkg/server/db/models"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -21,7 +21,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	pb "github.com/tektoncd/results/proto/pipeline/v1beta1/pipeline_go_proto"
+	ppb "github.com/tektoncd/results/proto/pipeline/v1beta1/pipeline_go_proto"
 )
 
 var (
@@ -85,7 +85,7 @@ type outcomeLog map[string]outcome
 func migrate(mysql, postgres *gorm.DB, write bool) (outcomeLog, error) {
 	outcomes := make(outcomeLog)
 
-	var results []*db.Result
+	var results []*models.Result
 	out := mysql.Find(&results)
 	if err := out.Error; err != nil {
 		return outcomes, fmt.Errorf("error reading MySQL results: %w", err)
@@ -111,7 +111,7 @@ func migrate(mysql, postgres *gorm.DB, write bool) (outcomeLog, error) {
 			// Since this is a dry run, query for the entities that already
 			// exist so we can report what would be written if this was ran for
 			// real.
-			out := postgres.Where(&db.Result{Parent: r.Parent, Name: r.Name, ID: r.ID}).First(&db.Result{})
+			out := postgres.Where(&models.Result{Parent: r.Parent, Name: r.Name, ID: r.ID}).First(&models.Result{})
 			if out.Error != nil {
 				if errors.Is(out.Error, gorm.ErrRecordNotFound) {
 					outcomes[key] = OutcomeDryRun
@@ -123,7 +123,7 @@ func migrate(mysql, postgres *gorm.DB, write bool) (outcomeLog, error) {
 		}
 	}
 
-	var records []*db.Record
+	var records []*models.Record
 	out = mysql.Find(&records)
 	if err := out.Error; err != nil {
 		return outcomes, fmt.Errorf("error reading MySQL records: %w", err)
@@ -148,7 +148,7 @@ func migrate(mysql, postgres *gorm.DB, write bool) (outcomeLog, error) {
 			}
 			outcomes[key] = OutcomeSuccess
 		} else {
-			out := postgres.Where(&db.Record{Parent: r.Parent, Name: r.Name, ID: r.ID}).First(&db.Record{})
+			out := postgres.Where(&models.Record{Parent: r.Parent, Name: r.Name, ID: r.ID}).First(&models.Record{})
 			if out.Error != nil {
 				if errors.Is(out.Error, gorm.ErrRecordNotFound) {
 					outcomes[key] = OutcomeDryRun
@@ -163,7 +163,7 @@ func migrate(mysql, postgres *gorm.DB, write bool) (outcomeLog, error) {
 	return outcomes, nil
 }
 
-func convertRecord(r *db.Record) error {
+func convertRecord(r *models.Record) error {
 	any := new(anypb.Any)
 	if err := proto.Unmarshal(r.Data, any); err != nil {
 		return fmt.Errorf("error reading record data: %v", err)
@@ -185,7 +185,7 @@ func convertRecord(r *db.Record) error {
 	var gen, observedGen int64
 	var wantType interface{}
 	switch m := out.(type) {
-	case *pb.TaskRun:
+	case *ppb.TaskRun:
 		r.Type = "tekton.dev/v1beta1.TaskRun"
 		wantType = &v1beta1.TaskRun{}
 
@@ -193,7 +193,7 @@ func convertRecord(r *db.Record) error {
 		m.Metadata.Generation = 0
 		observedGen = m.GetStatus().GetObservedGeneration()
 		m.Status.ObservedGeneration = 0
-	case *pb.PipelineRun:
+	case *ppb.PipelineRun:
 		r.Type = "tekton.dev/v1beta1.PipelineRun"
 		wantType = &v1beta1.PipelineRun{}
 

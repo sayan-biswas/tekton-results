@@ -18,13 +18,13 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	pb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	rpb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestClearOutputOnly(t *testing.T) {
-	m := &pb.Result{
+	m := &rpb.Result{
 		Name:        "a",
 		Id:          "b",
 		CreatedTime: timestamppb.Now(),
@@ -32,7 +32,7 @@ func TestClearOutputOnly(t *testing.T) {
 		Annotations: map[string]string{"c": "d"},
 		Etag:        "f",
 	}
-	want := &pb.Result{
+	want := &rpb.Result{
 		Name:        m.Name,
 		Annotations: m.Annotations,
 	}

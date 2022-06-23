@@ -19,9 +19,9 @@ import (
 	"net"
 	"testing"
 
-	"github.com/tektoncd/results/pkg/api/server/test"
-	server "github.com/tektoncd/results/pkg/api/server/v1alpha2"
-	pb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	"github.com/tektoncd/results/pkg/server/api/v1alpha2/server"
+	"github.com/tektoncd/results/pkg/server/db/test"
+	rpb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
 	"google.golang.org/grpc"
 )
 
@@ -29,14 +29,14 @@ const (
 	port = ":0"
 )
 
-func NewResultsClient(t *testing.T, opts ...server.Option) pb.ResultsClient {
+func NewResultsClient(t *testing.T, opts ...server.Option) rpb.ResultsClient {
 	t.Helper()
 	srv, err := server.New(test.NewDB(t), opts...)
 	if err != nil {
 		t.Fatalf("Failed to create fake server: %v", err)
 	}
 	s := grpc.NewServer()
-	pb.RegisterResultsServer(s, srv) // local test server
+	rpb.RegisterResultsServer(s, srv) // local test server
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
@@ -55,5 +55,5 @@ func NewResultsClient(t *testing.T, opts ...server.Option) pb.ResultsClient {
 		lis.Close()
 		conn.Close()
 	})
-	return pb.NewResultsClient(conn)
+	return rpb.NewResultsClient(conn)
 }

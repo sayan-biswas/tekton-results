@@ -25,7 +25,7 @@ import (
 	"github.com/tektoncd/results/pkg/internal/test"
 	"github.com/tektoncd/results/pkg/watcher/convert"
 	"github.com/tektoncd/results/pkg/watcher/reconciler/annotation"
-	pb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	rpb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -172,7 +172,7 @@ func TestEnsureResult(t *testing.T) {
 		name := fmt.Sprintf("test/results/%s", o.GetUID())
 
 		// Sanity check Result doesn't exist.
-		if r, err := client.GetResult(ctx, &pb.GetResultRequest{Name: name}); status.Code(err) != codes.NotFound {
+		if r, err := client.GetResult(ctx, &rpb.GetResultRequest{Name: name}); status.Code(err) != codes.NotFound {
 			t.Fatalf("Result already exists: %+v", r)
 		}
 
@@ -183,9 +183,9 @@ func TestEnsureResult(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := &pb.Result{
+			want := &rpb.Result{
 				Name: name,
-				Summary: &pb.RecordSummary{
+				Summary: &rpb.RecordSummary{
 					Record: recordName(name, o),
 					Type:   convert.TypeName(o),
 				},
@@ -232,7 +232,7 @@ func TestEnsureResult_RecordSummaryUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := &pb.Result{Name: resultName(pr)}
+	want := &rpb.Result{Name: resultName(pr)}
 	if diff := cmp.Diff(got, want, protocmp.Transform(), protoutil.IgnoreResultOutputOnly()); diff != "" {
 		t.Fatal(diff)
 	}
@@ -242,9 +242,9 @@ func TestEnsureResult_RecordSummaryUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want = &pb.Result{
+	want = &rpb.Result{
 		Name: resultName(pr),
-		Summary: &pb.RecordSummary{
+		Summary: &rpb.RecordSummary{
 			Record: recordName(resultName(pr), pr),
 			Type:   convert.TypeName(pr),
 		},
@@ -293,14 +293,14 @@ func TestUpsertRecord(t *testing.T) {
 
 			// Sanity check Record doesn't exist
 			name := fmt.Sprintf("%s/records/%s", result.GetName(), o.GetUID())
-			if r, err := client.GetRecord(ctx, &pb.GetRecordRequest{Name: name}); status.Code(err) != codes.NotFound {
+			if r, err := client.GetRecord(ctx, &rpb.GetRecordRequest{Name: name}); status.Code(err) != codes.NotFound {
 				t.Fatalf("Record already exists: %+v", r)
 			}
 
 			// Ignore server generated fields.
-			opts := []cmp.Option{protocmp.Transform(), protocmp.IgnoreFields(&pb.Record{}, "id", "uid", "updated_time", "update_time", "create_time", "created_time", "etag")}
+			opts := []cmp.Option{protocmp.Transform(), protocmp.IgnoreFields(&rpb.Record{}, "id", "uid", "updated_time", "update_time", "create_time", "created_time", "etag")}
 
-			var record *pb.Record
+			var record *rpb.Record
 			// Start from scratch and create a new record.
 			t.Run("create", func(t *testing.T) {
 				record, err = client.upsertRecord(ctx, result.GetName(), o)
@@ -312,7 +312,7 @@ func TestUpsertRecord(t *testing.T) {
 					t.Errorf("upsertRecord diff (-want, +got):\n%s", diff)
 				}
 				// Verify upstream Record matches.
-				got, err := client.GetRecord(ctx, &pb.GetRecordRequest{Name: name})
+				got, err := client.GetRecord(ctx, &rpb.GetRecordRequest{Name: name})
 				if err != nil {
 					t.Fatalf("GetRecord: %v", err)
 				}
@@ -392,12 +392,12 @@ func TestPut(t *testing.T) {
 			}
 
 			// Verify Result/Record exist.
-			if _, err := client.GetResult(ctx, &pb.GetResultRequest{
+			if _, err := client.GetResult(ctx, &rpb.GetResultRequest{
 				Name: fmt.Sprintf("test/results/%s", o.GetUID()),
 			}); err != nil {
 				t.Fatalf("GetResult: %v", err)
 			}
-			if _, err := client.GetRecord(ctx, &pb.GetRecordRequest{
+			if _, err := client.GetRecord(ctx, &rpb.GetRecordRequest{
 				Name: fmt.Sprintf("test/results/%s/records/%s", o.GetUID(), o.GetUID()),
 			}); err != nil {
 				t.Fatalf("GetRecord: %v", err)
@@ -406,14 +406,14 @@ func TestPut(t *testing.T) {
 	}
 }
 
-func crdToRecord(t *testing.T, name string, o Object) *pb.Record {
+func crdToRecord(t *testing.T, name string, o Object) *rpb.Record {
 	t.Helper()
 
 	m, err := convert.ToProto(o)
 	if err != nil {
 		t.Fatalf("convert.ToProto(): %v", err)
 	}
-	return &pb.Record{
+	return &rpb.Record{
 		Name: name,
 		Data: m,
 	}

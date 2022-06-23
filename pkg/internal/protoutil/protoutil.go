@@ -19,8 +19,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	pb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
-	fbpb "google.golang.org/genproto/googleapis/api/annotations"
+	rpb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -54,8 +54,8 @@ func ClearOutputOnly(pb proto.Message) {
 	m := pb.ProtoReflect()
 	m.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 		opts := fd.Options().(*descriptorpb.FieldOptions)
-		for _, b := range proto.GetExtension(opts, fbpb.E_FieldBehavior).([]fbpb.FieldBehavior) {
-			if b == fbpb.FieldBehavior_OUTPUT_ONLY {
+		for _, b := range proto.GetExtension(opts, annotations.E_FieldBehavior).([]annotations.FieldBehavior) {
+			if b == annotations.FieldBehavior_OUTPUT_ONLY {
 				m.Clear(fd)
 			}
 		}
@@ -69,5 +69,5 @@ func IgnoreResultOutputOnly() cmp.Option {
 	// We might be able to something fancy with protocmp / cmp to filter
 	// by the actual extension value, but for now this is straightforward
 	// and works.
-	return protocmp.IgnoreFields(&pb.Result{}, "update_time", "updated_time", "etag", "uid", "id", "create_time", "created_time")
+	return protocmp.IgnoreFields(&rpb.Result{}, "update_time", "updated_time", "etag", "uid", "id", "create_time", "created_time")
 }
