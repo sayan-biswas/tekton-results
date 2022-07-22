@@ -20,18 +20,18 @@ import (
 	pipelineclient "github.com/tektoncd/pipeline/pkg/client/injection/client"
 	taskruninformer "github.com/tektoncd/pipeline/pkg/client/injection/informers/pipeline/v1beta1/taskrun"
 	"github.com/tektoncd/results/pkg/watcher/reconciler"
-	pb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	rpb "github.com/tektoncd/results/proto/results/v1alpha2"
 	"k8s.io/client-go/tools/cache"
 	"knative.dev/pkg/controller"
 	"knative.dev/pkg/logging"
 )
 
 // NewController creates a Controller for watching TaskRuns.
-func NewController(ctx context.Context, client pb.ResultsClient) *controller.Impl {
+func NewController(ctx context.Context, client rpb.ResultsClient) *controller.Impl {
 	return NewControllerWithConfig(ctx, client, &reconciler.Config{})
 }
 
-func NewControllerWithConfig(ctx context.Context, client pb.ResultsClient, cfg *reconciler.Config) *controller.Impl {
+func NewControllerWithConfig(ctx context.Context, client rpb.ResultsClient, cfg *reconciler.Config) *controller.Impl {
 	informer := taskruninformer.Get(ctx)
 
 	c := &Reconciler{

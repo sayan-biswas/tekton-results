@@ -12,6 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate protoc --go_out=. --go_opt=paths=source_relative  --go-grpc_out=. --go-grpc_opt=paths=source_relative -I$GOPATH/src/github.com/googleapis/googleapis -I. common.proto taskrun.proto pipelinerun.proto
+//go:generate protoc --go_out=. --go_opt=paths=source_relative  --go-grpc_out=. --go-grpc_opt=paths=source_relative --grpc-gateway_out=. --grpc-gateway_opt=paths=source_relative -I$GOPATH/src/github.com/googleapis/googleapis -I../../pipeline/v1beta1 -I. results.proto resources.proto
 
-package v1beta1
+package v1alpha2

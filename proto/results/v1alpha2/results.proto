@@ -1,0 +1,276 @@
+// Copyright 2020 The Tekton Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package tekton.results.v1alpha2;
+
+import "resources.proto";
+
+import "google/api/annotations.proto";
+import "google/api/field_behavior.proto";
+import "google/api/client.proto";
+import "google/api/resource.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/field_mask.proto";
+
+option go_package = "github.com/tektoncd/results/apis/results/v1alpha2";
+
+service Results {
+  rpc GetResult(GetResultRequest) returns (Result) {
+    option (google.api.http) = {
+      get: "/v1alpha2/{name=clusters/*/namespaces/*/results/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc ListResults(ListResultsRequest) returns (ListResultsResponse) {
+    option (google.api.http) = {
+      get: "/v1alpha2/{parent=clusters/*/namespaces/*}/results"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  rpc CreateResult(CreateResultRequest) returns (Result) {
+    option (google.api.http) = {
+      post: "/v1alpha2/{parent=clusters/*/namespaces/*}/results"
+      body: "result"
+    };
+    option (google.api.method_signature) = "parent,result";
+  }
+
+  rpc UpdateResult(UpdateResultRequest) returns (Result) {
+    option (google.api.http) = {
+      patch: "/v1alpha2/{result.name=clusters/*/namespaces/*/results/*}"
+      body: "result"
+    };
+    option (google.api.method_signature) = "result,update_mask";
+  }
+
+  rpc DeleteResult(DeleteResultRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1alpha2/{name=clusters/*/namespaces/*/results/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc GetRecord(GetRecordRequest) returns (Record) {
+    option (google.api.http) = {
+      get: "/v1alpha2/{name=clusters/*/namespaces/*/results/*/records/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc ListRecords(ListRecordsRequest) returns (ListRecordsResponse) {
+    option (google.api.http) = {
+      get: "/v1alpha2/{parent=clusters/*/namespaces/*/results/*}/records"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  rpc CreateRecord(CreateRecordRequest) returns (Record) {
+    option (google.api.http) = {
+    post: "/v1alpha2/{parent=clusters/*/namespaces/*/results/*}/records"
+      body: "record"
+    };
+    option (google.api.method_signature) = "parent,record";
+  }
+
+  rpc UpdateRecord(UpdateRecordRequest) returns (Record) {
+    option (google.api.http) = {
+    patch: "/v1alpha2/{record.name=clusters/*/namespaces/*/results/*/records/*}"
+      body: "record"
+    };
+    option (google.api.method_signature) = "record,update_mask";
+  }
+
+  rpc DeleteRecord(DeleteRecordRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1alpha2/{name=clusters/*/namespaces/*/results/*/records/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+}
+
+message GetResultRequest {
+  // Name of the result to retrieve.
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Result"
+    }];
+}
+
+message ListResultsRequest {
+  // The parent, which owns this collection of results.
+  // Format: clusters/{workspace}/namespaces/{namespace}
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      child_type: "tekton.results.v1alpha2/Result"
+    }];
+
+  // CEL filter string
+  string filter = 2;
+
+  // Order collection
+  string order_by = 3;
+
+  // The maximum number of results to return. The service may return fewer than
+  // this value.
+  // If unspecified, at most 50 results will be returned.
+  // The maximum value is 1000; values above 1000 will be coerced to 1000.
+  int32 page_size = 4;
+
+  // A page token, received from a previous `ListResults` call.
+  // Provide this to retrieve the subsequent page.
+  //
+  // When paginating, all other parameters provided to `ListResults` must match
+  // the call that provided the page token.
+  string page_token = 5;
+}
+
+message ListResultsResponse {
+  // The collection of results
+  repeated Result results = 1;
+
+  // A token, which can be sent as `page_token` to retrieve the next page.
+  // If this field is omitted, there are no subsequent pages.
+  string next_page_token = 2;
+}
+
+message CreateResultRequest {  // The parent, which owns this collection of results.
+  // Format: clusters/{workspace}/namespaces/{namespace}
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Result"
+    }];
+
+  // The result to create
+  Result result = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateResultRequest {
+  // The result to update.
+  //
+  // The result's `name` field is used to identify the book to update.
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}
+  Result result = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The list of fields to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // The etag for this result.
+  // If this is provided on update, it must match the server's etag.
+  string etag = 3;
+}
+
+message DeleteResultRequest {
+  // Name of the result to delete.
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Result"
+    }];
+}
+
+message GetRecordRequest {
+  // Name of the record to retrieve.
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}/records/{record}
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Record"
+    }];
+}
+
+message ListRecordsRequest {
+  // The parent, which owns this collection of records.
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Result"
+      child_type: "tekton.results.v1alpha2/Record"
+    }];
+
+  // CEL filter string
+  string filter = 2;
+
+  // Order collection
+  string order_by = 3;
+
+  // The maximum number of results to return. The service may return fewer than
+  // this value.
+  // If unspecified, at most 50 results will be returned.
+  // The maximum value is 1000; values above 1000 will be coerced to 1000.
+  int32 page_size = 4;
+
+  // A page token, received from a previous `ListRecords` call.
+  // Provide this to retrieve the subsequent page.
+  //
+  // When paginating, all other parameters provided to `ListRecords` must match
+  // the call that provided the page token.
+  string page_token = 5;
+}
+
+message ListRecordsResponse {
+  // The collection of records
+  repeated Record records = 1;
+
+  // A token, which can be sent as `page_token` to retrieve the next page.
+  // If this field is omitted, there are no subsequent pages.
+  string next_page_token = 2;
+}
+
+message CreateRecordRequest {
+  // Parent resource where the record will be created.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Result"
+      child_type: "tekton.results.v1alpha2/Record"
+  }];
+
+  // The record to create
+  Record record = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateRecordRequest {
+  // The record to update.
+  //
+  // The record's `name` field is used to identify the book to update.
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}/records/{record}
+  Record record = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The list of fields to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // The etag for this result.
+  // If this is provided on update, it must match the server's etag.
+  string etag = 3;
+}
+
+message DeleteRecordRequest {
+  // Name of the record to delete.
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}/records/{record}
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Record"
+    }];
+}

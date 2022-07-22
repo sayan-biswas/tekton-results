@@ -25,7 +25,7 @@ import (
 	"github.com/tektoncd/results/pkg/internal/test"
 	"github.com/tektoncd/results/pkg/watcher/convert"
 	"github.com/tektoncd/results/pkg/watcher/reconciler/annotation"
-	rpb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	rpb "github.com/tektoncd/results/proto/results/v1alpha2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -179,7 +179,7 @@ func TestEnsureResult(t *testing.T) {
 		// Run each test 2x - once for the initial Result creation, another to
 		// get the existing Result.
 		t.Run(o.GetName(), func(t *testing.T) {
-			create, err := client.ensureResult(ctx, o)
+			create, err := client.upsertResult(ctx, o)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -194,7 +194,7 @@ func TestEnsureResult(t *testing.T) {
 				t.Errorf("Create Result diff (-want, +got):\n%s", diff)
 			}
 
-			get, err := client.ensureResult(ctx, o)
+			get, err := client.upsertResult(ctx, o)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -228,7 +228,7 @@ func TestEnsureResult_RecordSummaryUpdate(t *testing.T) {
 
 	// Create TaskRun first - this will create a Result for the PipelineRun,
 	// but will *not* populate the RecordSummary.
-	got, err := client.ensureResult(ctx, tr)
+	got, err := client.upsertResult(ctx, tr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestEnsureResult_RecordSummaryUpdate(t *testing.T) {
 	}
 
 	// Create the PipelineRun - this will update the Result with the Summary.
-	got, err = client.ensureResult(ctx, pr)
+	got, err = client.upsertResult(ctx, pr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +286,7 @@ func TestUpsertRecord(t *testing.T) {
 	}
 	for _, o := range objs {
 		t.Run(o.GetName(), func(t *testing.T) {
-			result, err := client.ensureResult(ctx, o)
+			result, err := client.upsertResult(ctx, o)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -381,7 +381,7 @@ func TestPut(t *testing.T) {
 		// Run each test 2x - once for the initial creation, another to
 		// simulate an update.
 		// This is less exhaustive than the other tests, since Put is a wrapper
-		// around ensureResult/upsertRecord.
+		// around upsertResult/upsertRecord.
 		t.Run(o.GetName(), func(t *testing.T) {
 			for _, tc := range []string{"create", "update"} {
 				t.Run(tc, func(t *testing.T) {

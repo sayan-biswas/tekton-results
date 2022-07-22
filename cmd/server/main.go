@@ -23,9 +23,9 @@ import (
 	prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/tektoncd/results/pkg/server/api/v1alpha2/server"
+	"github.com/tektoncd/results/pkg/server/api/v1alpha2"
 	"github.com/tektoncd/results/pkg/server/auth"
-	rpb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	rpb "github.com/tektoncd/results/proto/results/v1alpha2"
 	_ "go.uber.org/automaxprocs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -38,26 +38,32 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
+	"path"
 )
 
 var (
+	apiAuth     = flag.Bool("api-auth", false, "Enable/Disable API auth")
 	dbHost      = flag.String("db-host", "", "Database host")
 	dbPort      = flag.String("db-port", "5432", "Database port")
 	dbName      = flag.String("db-name", "", "Database name")
 	dbUser      = flag.String("db-user", "", "Database user")
 	dbPassword  = flag.String("db-password", "", "Database password")
 	dbSSL       = flag.String("db-ssl", "disable", "Enable/Disable database SSL mode")
-	apiAuth     = flag.Bool("api-auth", false, "Enable/Disable API auth")
-	kubeHost    = flag.String("kube-host", "", "Kubernetes API server host")
+	kubeServer  = flag.String("kube-server", "", "Kubernetes API server")
+	kubeCA      = flag.String("kube-ca", "/etc/tls/kube.ca", "Kubernetes API server CA File")
 	grpcPort    = flag.String("grpc-port", "50051", "GRPC API Port")
-	restPort    = flag.String("rest-port", "8080", "REST API Port")
 	promPort    = flag.String("prometheus-port", "9090", "Prometheus Port")
+	restPort    = flag.String("rest-port", "8080", "REST API Port")
 	tlsPath     = flag.String("tls-path", "/etc/tls", "TLS cert and key path")
 	tlsOverride = flag.String("tls-override", "", "TLS server name override")
 )
 
 func main() {
 	flag.Parse()
+
+	// Check parameters
+	*tlsPath = path.Clean(*tlsPath)
 
 	// Connect to the database.
 	if *dbHost == "" || *dbName == "" || *dbUser == "" || *dbPassword == "" {
@@ -70,7 +76,7 @@ func main() {
 	}
 
 	// Load server TLS cert
-	creds, err := credentials.NewServerTLSFromFile(*tlsPath+"/tls.crt", *tlsPath+"/tls.key")
+	creds, err := credentials.NewServerTLSFromFile(path.Join(*tlsPath, "tls.crt"), path.Join(*tlsPath, "tls.key"))
 	if err != nil {
 		log.Fatal("Error loading TLS key pair: ", err)
 	}
@@ -79,16 +85,20 @@ func main() {
 	var authChecker auth.Checker
 	authChecker = auth.AllowAll{}
 	if *apiAuth {
+		kubeURL, err := url.Parse(*kubeServer)
+		if err != nil {
+			log.Fatal("Invalid kube server address: ", err)
+		}
 		authChecker = auth.NewRBAC(&rest.Config{
-			Host: *kubeHost,
+			Host: kubeURL.String(),
 			TLSClientConfig: rest.TLSClientConfig{
-				CAFile: *tlsPath + "/ca.crt",
+				CAFile: *kubeCA,
 			},
 		})
 	}
 
 	// Register API api(s)
-	v1a2, err := server.New(db, server.WithAuth(authChecker))
+	v1a2, err := v1alpha2.New(db, v1alpha2.WithAuth(authChecker))
 	if err != nil {
 		log.Fatal("Error creating GRPC server: ", err)
 	}
@@ -130,7 +140,7 @@ func main() {
 	}()
 
 	// Load client TLS cert
-	creds, err = credentials.NewClientTLSFromFile(*tlsPath+"/tls.crt", *tlsOverride)
+	creds, err = credentials.NewClientTLSFromFile(path.Join(*tlsPath, "tls.crt"), *tlsOverride)
 	if err != nil {
 		log.Fatal("Error loading TLS certificate: ", err)
 	}
@@ -148,5 +158,5 @@ func main() {
 
 	// Start HTTP server (and proxy calls to gRPC server endpoint)
 	log.Printf("REST server Listening on: %s", *restPort)
-	log.Fatal(http.ListenAndServeTLS(":"+*restPort, *tlsPath+"/tls.crt", *tlsPath+"/tls.key", mux))
+	log.Fatal(http.ListenAndServeTLS(":"+*restPort, path.Join(*tlsPath, "tls.crt"), path.Join(*tlsPath, "tls.key"), mux))
 }

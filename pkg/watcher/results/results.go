@@ -25,7 +25,7 @@ import (
 	"github.com/tektoncd/results/pkg/server/api/v1alpha2/result"
 	"github.com/tektoncd/results/pkg/watcher/convert"
 	"github.com/tektoncd/results/pkg/watcher/reconciler/annotation"
-	rpb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	rpb "github.com/tektoncd/results/proto/results/v1alpha2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -70,15 +70,15 @@ type StatusConditionGetter interface {
 // result, one is created automatically.
 // If the Object is already associated with a Record, the existing Record is
 // updated - otherwise a new Record is created.
-func (c *Client) Put(ctx context.Context, o Object, opts ...grpc.CallOption) (*rpb.Result, *rpb.Record, error) {
+func (c *Client) Put(ctx context.Context, parent string, object Object, opts ...grpc.CallOption) (*rpb.Result, *rpb.Record, error) {
 	// Make sure parent Result exists (or create one)
-	result, err := c.ensureResult(ctx, o, opts...)
+	result, err := c.upsertResult(ctx, parent, object, opts...)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Create or update the record.
-	record, err := c.upsertRecord(ctx, result.GetName(), o, opts...)
+	record, err := c.upsertRecord(ctx, result.GetName(), object, opts...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -86,10 +86,10 @@ func (c *Client) Put(ctx context.Context, o Object, opts ...grpc.CallOption) (*r
 	return result, record, nil
 }
 
-// ensureResult gets the Result corresponding to the Object, creates a new
+// upsertResult gets the Result corresponding to the Object, creates a new
 // one, or updates the existing Result with new Object details if necessary.
-func (c *Client) ensureResult(ctx context.Context, o Object, opts ...grpc.CallOption) (*rpb.Result, error) {
-	name := resultName(o)
+func (c *Client) upsertResult(ctx context.Context, parent string, object Object, opts ...grpc.CallOption) (*rpb.Result, error) {
+	name := resultName(parent, object)
 	curr, err := c.ResultsClient.GetResult(ctx, &rpb.GetResultRequest{Name: name}, opts...)
 	if err != nil && status.Code(err) != codes.NotFound {
 		return nil, status.Errorf(status.Code(err), "GetResult(%s): %v", name, err)
@@ -98,15 +98,15 @@ func (c *Client) ensureResult(ctx context.Context, o Object, opts ...grpc.CallOp
 	new := &rpb.Result{
 		Name: name,
 	}
-	topLevel := isTopLevelRecord(o)
+	topLevel := isTopLevelRecord(object)
 	if topLevel {
 		// If the object corresponds to a top level record  - include a RecordSummary.
 		new.Summary = &rpb.RecordSummary{
-			Record:    recordName(name, o),
-			Type:      convert.TypeName(o),
-			Status:    convert.Status(o.GetStatusCondition()),
-			StartTime: getTimestamp(o.GetStatusCondition().GetCondition(apis.ConditionReady)),
-			EndTime:   getTimestamp(o.GetStatusCondition().GetCondition(apis.ConditionSucceeded)),
+			Record:    recordName(name, object),
+			Type:      convert.TypeName(object),
+			Status:    convert.Status(object.GetStatusCondition()),
+			StartTime: getTimestamp(object.GetStatusCondition().GetCondition(apis.ConditionReady)),
+			EndTime:   getTimestamp(object.GetStatusCondition().GetCondition(apis.ConditionSucceeded)),
 		}
 	}
 
@@ -115,7 +115,7 @@ func (c *Client) ensureResult(ctx context.Context, o Object, opts ...grpc.CallOp
 	if status.Code(err) == codes.NotFound {
 		// Result doesn't exist yet - create.
 		req := &rpb.CreateResultRequest{
-			Parent: o.GetNamespace(),
+			Parent: parent,
 			Result: new,
 		}
 		return c.ResultsClient.CreateResult(ctx, req, opts...)
@@ -138,67 +138,16 @@ func (c *Client) ensureResult(ctx context.Context, o Object, opts ...grpc.CallOp
 		return curr, nil
 	}
 	req := &rpb.UpdateResultRequest{
-		Name:   name,
 		Result: new,
 	}
 	return c.ResultsClient.UpdateResult(ctx, req, opts...)
 }
 
-func getTimestamp(c *apis.Condition) *timestamppb.Timestamp {
-	if c == nil || c.IsFalse() {
-		return nil
-	}
-	return timestamppb.New(c.LastTransitionTime.Inner.Time)
-}
-
-// resultName gets the result name to use for the given object.
-// The name is derived from a known Tekton annotation if available, else
-// the object's name is used.
-func resultName(o metav1.Object) string {
-	// Special case result annotations, since this should already be the
-	// full result identifier.
-	if v, ok := o.GetAnnotations()[annotation.Result]; ok {
-		return v
-	}
-
-	var part string
-	if v, ok := o.GetLabels()["triggers.tekton.dev/triggers-eventid"]; ok {
-		// Don't prefix trigger events. These are 1) not CRD types, 2) are
-		// intended to be unique identifiers already, and 3) should be applied
-		// to all objects created via trigger templates, so there's no need to
-		// prefix these to avoid collision.
-		part = v
-	} else if len(o.GetOwnerReferences()) > 0 {
-		for _, owner := range o.GetOwnerReferences() {
-			if strings.EqualFold(owner.Kind, "pipelinerun") {
-				part = string(owner.UID)
-				break
-			}
-		}
-	}
-
-	if part == "" {
-		part = defaultName(o)
-	}
-	return result.FormatName(o.GetNamespace(), part)
-}
-
-func recordName(parent string, o Object) string {
-	name, ok := o.GetAnnotations()[annotation.Record]
-	if ok {
-		return name
-	}
-	return record.FormatName(parent, defaultName(o))
-}
-
 // upsertRecord updates or creates a record for the object. If there has been
 // no change in the Record data, the existing Record is returned.
-func (c *Client) upsertRecord(ctx context.Context, parent string, o Object, opts ...grpc.CallOption) (*rpb.Record, error) {
-	name, ok := o.GetAnnotations()[annotation.Record]
-	if !ok {
-		name = record.FormatName(parent, defaultName(o))
-	}
-	data, err := convert.ToProto(o)
+func (c *Client) upsertRecord(ctx context.Context, parent string, object Object, opts ...grpc.CallOption) (*rpb.Record, error) {
+	name := recordName(parent, object)
+	data, err := convert.ToProto(object)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +173,7 @@ func (c *Client) upsertRecord(ctx context.Context, parent string, o Object, opts
 		// sufficient).
 		// See https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#ObjectMeta
 		// for field details.
-		if o.GetGeneration() != 0 && o.GetGeneration() == u.GetGeneration() {
+		if object.GetGeneration() != 0 && object.GetGeneration() == u.GetGeneration() {
 			// The record data already matches what's stored. Don't update
 			// since this will rev update times which throws off resource
 			// cleanup checks.
@@ -247,10 +196,57 @@ func (c *Client) upsertRecord(ctx context.Context, parent string, o Object, opts
 	}, opts...)
 }
 
+func getTimestamp(c *apis.Condition) *timestamppb.Timestamp {
+	if c == nil || c.IsFalse() {
+		return nil
+	}
+	return timestamppb.New(c.LastTransitionTime.Inner.Time)
+}
+
+// resultName gets the result name to use for the given object.
+// The name is derived from a known Tekton annotation if available, else
+// the object's name is used.
+func resultName(parent string, object metav1.Object) string {
+	// Special case result annotations, since this should already be the
+	// full result identifier.
+	if v, ok := object.GetAnnotations()[annotation.Result]; ok {
+		return v
+	}
+
+	var name string
+	if v, ok := object.GetLabels()["triggers.tekton.dev/triggers-eventid"]; ok {
+		// Don't prefix trigger events. These are 1) not CRD types, 2) are
+		// intended to be unique identifiers already, and 3) should be applied
+		// to all objects created via trigger templates, so there's no need to
+		// prefix these to avoid collision.
+		name = v
+	} else if len(object.GetOwnerReferences()) > 0 {
+		for _, owner := range object.GetOwnerReferences() {
+			if strings.EqualFold(owner.Kind, "pipelinerun") {
+				name = string(owner.UID)
+				break
+			}
+		}
+	}
+
+	if name == "" {
+		name = string(object.GetUID())
+	}
+	return result.FormatName(parent, name)
+}
+
+func recordName(parent string, object Object) string {
+	name, ok := object.GetAnnotations()[annotation.Record]
+	if ok {
+		return name
+	}
+	return record.FormatName(parent, string(object.GetUID()))
+}
+
 // defaultName is the default Result/Record name that should be used if one is
 // not already associated to the Object.
-func defaultName(o metav1.Object) string {
-	return string(o.GetUID())
+func defaultName(object metav1.Object) string {
+	return string(object.GetUID())
 }
 
 // isTopLevelRecord determines whether an Object is a top level Record - e.g. a
@@ -258,6 +254,6 @@ func defaultName(o metav1.Object) string {
 // of timing, status, etc. For example, if a Result contains records for a PipelineRun
 // and TaskRun, the PipelineRun should take precendence.
 // We define an Object to be top level if it does not have any OwnerReferences.
-func isTopLevelRecord(o Object) bool {
-	return len(o.GetOwnerReferences()) == 0
+func isTopLevelRecord(object Object) bool {
+	return len(object.GetOwnerReferences()) == 0
 }

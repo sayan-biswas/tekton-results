@@ -76,9 +76,6 @@ func (c *RBAC) Check(ctx context.Context, cluster, namespace, resource, verb str
 
 	// Check RBAC rule
 	ssar, err := authz.SelfSubjectAccessReviews().Create(ctx, &authzv1.SelfSubjectAccessReview{
-		//ObjectMeta: metav1.ObjectMeta{
-		//	Namespace: namespace,
-		//},
 		Spec: authzv1.SelfSubjectAccessReviewSpec{
 			ResourceAttributes: &authzv1.ResourceAttributes{
 				Group:     "results.tekton.dev",
@@ -98,74 +95,3 @@ func (c *RBAC) Check(ctx context.Context, cluster, namespace, resource, verb str
 	}
 	return status.Error(codes.Unauthenticated, "Unauthorized")
 }
-
-//type RBAC struct {
-//	authn authnclient.AuthenticationV1Interface
-//	authz authzclient.AuthorizationV1Interface
-//}
-
-//func NewRBAC(client kubernetes.Interface) *RBAC {
-//	return &RBAC{
-//		authn: client.AuthenticationV1(),
-//		authz: client.AuthorizationV1(),
-//	}
-//}
-
-//func (r *RBAC) Check(ctx context.Context, namespace, resource, verb string) error {
-//	md, ok := metadata.FromIncomingContext(ctx)
-//	if !ok {
-//		return status.Error(codes.Unauthenticated, "unable to get context metadata")
-//	}
-//	v := md.Get("authorization")
-//	if len(v) == 0 {
-//		return status.Error(codes.Unauthenticated, "unable to find token")
-//	}
-//
-//	for _, raw := range v {
-//		// We expect tokens to be in the form "Bearer <token>". Parse the token out.
-//		s := strings.SplitN(raw, " ", 2)
-//		if len(s) < 2 {
-//			log.Println("unknown auth token format")
-//			continue
-//		}
-//		t := s[1]
-//
-//		// Authenticate the token by sending it to the API Server for review.
-//		tr, err := r.authn.TokenReviews().Create(ctx, &authnv1.TokenReview{
-//			Spec: authnv1.TokenReviewSpec{
-//				Token: t,
-//			},
-//		}, metav1.CreateOptions{})
-//		if err != nil {
-//			log.Println(err)
-//			continue
-//		}
-//		if !tr.Status.Authenticated {
-//			continue
-//		}
-//
-//		// Authorize the request by checking the RBAC permissions for the resource.
-//		sar, err := r.authz.SubjectAccessReviews().Create(ctx, &authzv1.SubjectAccessReview{
-//			Spec: authzv1.SubjectAccessReviewSpec{
-//				User:   tr.Status.User.Username,
-//				Groups: []string{"tekton.dev"},
-//				ResourceAttributes: &authzv1.ResourceAttributes{
-//					Namespace: namespace,
-//					Group:     "results.tekton.dev",
-//					Resource:  resource,
-//					Verb:      verb,
-//				},
-//			},
-//		}, metav1.CreateOptions{})
-//		if err != nil {
-//			log.Println(err)
-//			continue
-//		}
-//		if sar.Status.Allowed {
-//			return nil
-//		}
-//	}
-//	// Return Unauthenticated - we don't know if we failed because of invalid
-//	// token or unauthorized user, so this is safer to not leak any state.
-//	return status.Error(codes.Unauthenticated, "permission denied")
-//}

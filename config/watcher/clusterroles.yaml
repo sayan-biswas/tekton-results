@@ -1,0 +1,28 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: watcher
+  labels:
+    app.kubernetes.io/name: tekton-results-watcher
+rules:
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelineruns", "taskruns"]
+    verbs: ["get", "list", "patch", "update", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps", "namespaces", "serviceaccounts", "secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: watcher
+  labels:
+    app.kubernetes.io/name: tekton-results-watcher
+subjects:
+  - kind: ServiceAccount
+    name: watcher
+    namespace: tekton-results
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: watcher

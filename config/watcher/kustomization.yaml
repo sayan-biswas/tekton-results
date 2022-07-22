@@ -1,0 +1,56 @@
+# Copyright 2021 The Tekton Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+resources:
+- clusterroles.yaml
+- serviceaccount.yaml
+- deployment.yaml
+
+namePrefix: tekton-results-
+namespace: tekton-results
+
+commonLabels:
+  app.kubernetes.io/part-of: tekton-results
+  app.kubernetes.io/version: 0.4.0
+
+images:
+  - name: watcher
+    newName: quay.io/sayan-biswas/tekton-results-watcher
+    digest: sha256:be80b2c1d5886cf52900c3e1a12b97487770d1c0b0768287e4b1726b3a4d7ab1
+
+configMapGenerator:
+  - name: watcher
+    options:
+      labels:
+        app.kubernetes.io/name: tekton-results-watcher
+    literals:
+      - API_SERVER=results.tekton.dev:443
+      - AUTH_MODE=service-account
+      - AUTH_SERVICE_ACCOUNT=tekton-results:tekton-results
+
+secretGenerator:
+  - name: tls
+    type: "kubernetes.io/tls"
+    options:
+      labels:
+        app.kubernetes.io/name: tekton-results-watcher
+    files:
+      - "tls.crt"
+      - "tls.key"

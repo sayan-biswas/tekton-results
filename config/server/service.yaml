@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: server
+  labels:
+    app.kubernetes.io/name: tekton-results-server
+spec:
+  selector:
+    app.kubernetes.io/name: tekton-results-server
+  ports:
+    - name: grpc
+      protocol: TCP
+      port: 50051
+      targetPort: 50051
+    - name: rest
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+    - name: prom
+      protocol: TCP
+      port: 9090
+      targetPort: 9090

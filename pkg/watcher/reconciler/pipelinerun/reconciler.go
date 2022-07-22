@@ -8,14 +8,14 @@ import (
 	"github.com/tektoncd/pipeline/pkg/client/listers/pipeline/v1beta1"
 	"github.com/tektoncd/results/pkg/watcher/reconciler"
 	"github.com/tektoncd/results/pkg/watcher/reconciler/dynamic"
-	pb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	rpb "github.com/tektoncd/results/proto/results/v1alpha2"
 	"go.uber.org/zap"
 	"k8s.io/client-go/tools/cache"
 	"knative.dev/pkg/logging"
 )
 
 type Reconciler struct {
-	client    pb.ResultsClient
+	client    rpb.ResultsClient
 	lister    v1beta1.PipelineRunLister
 	k8sclient versioned.Interface
 	cfg       *reconciler.Config

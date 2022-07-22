@@ -14,10 +14,19 @@
 
 package reconciler
 
-import "time"
+import (
+	"k8s.io/client-go/kubernetes"
+	"time"
+)
 
 // Config defines shared reconciler configuration options.
 type Config struct {
+	// Auth config for API access
+	Auth Auth
+
+	// Instance of kubernetes client go to fetch other resources
+	KubeClient kubernetes.Interface
+
 	// Configures whether Tekton CRD objects should be updated with Result
 	// annotations during reconcile. Useful to enable for dry run modes.
 	DisableAnnotationUpdate bool
@@ -25,6 +34,13 @@ type Config struct {
 	// CompletedResourceGracePeriod is the time to wait before deleting completed resources.
 	// 0 implies the duration
 	CompletedResourceGracePeriod time.Duration
+}
+
+// Auth defines the configurations for API authentication
+type Auth struct {
+	AuthMode                string
+	ServiceAccount          string
+	ServiceAccountNamespace string
 }
 
 // GetDisableAnnotationupdate returns whether annotation updates should be

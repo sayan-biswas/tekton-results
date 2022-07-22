@@ -25,7 +25,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/tektoncd/results/pkg/server/cel"
 	"github.com/tektoncd/results/pkg/server/db/models"
-	rpb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	rpb "github.com/tektoncd/results/proto/results/v1alpha2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/testing/protocmp"

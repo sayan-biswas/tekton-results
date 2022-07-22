@@ -28,7 +28,7 @@ import (
 	"github.com/tektoncd/results/pkg/server/api/v1alpha2/result"
 	"github.com/tektoncd/results/pkg/watcher/reconciler"
 	"github.com/tektoncd/results/pkg/watcher/reconciler/annotation"
-	pb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	rpb "github.com/tektoncd/results/proto/results/v1alpha2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,7 +44,7 @@ import (
 type env struct {
 	ctx     context.Context
 	ctrl    *controller.Impl
-	results pb.ResultsClient
+	results rpb.ResultsClient
 	dynamic *dynamicclient.FakeDynamicClient
 }
 
@@ -143,11 +143,11 @@ func TestReconcile_TaskRun(t *testing.T) {
 
 	t.Run("DisabledAnnotations", func(t *testing.T) {
 		resultName := result.FormatName(taskrun.GetNamespace(), string(taskrun.GetUID()))
-		if _, err := results.GetResult(ctx, &pb.GetResultRequest{Name: resultName}); err != nil {
+		if _, err := results.GetResult(ctx, &rpb.GetResultRequest{Name: resultName}); err != nil {
 			t.Fatalf("GetResult: %v", err)
 		}
 		recordName := record.FormatName(resultName, string(taskrun.GetUID()))
-		if _, err := results.GetRecord(ctx, &pb.GetRecordRequest{Name: recordName}); err != nil {
+		if _, err := results.GetRecord(ctx, &rpb.GetRecordRequest{Name: recordName}); err != nil {
 			t.Fatalf("GetRecord: %v", err)
 		}
 	})
@@ -168,10 +168,10 @@ func TestReconcile_TaskRun(t *testing.T) {
 		}
 	}
 
-	if _, err := results.GetResult(ctx, &pb.GetResultRequest{Name: tr.GetAnnotations()[annotation.Result]}); err != nil {
+	if _, err := results.GetResult(ctx, &rpb.GetResultRequest{Name: tr.GetAnnotations()[annotation.Result]}); err != nil {
 		t.Fatalf("GetResult: %v", err)
 	}
-	if _, err := results.GetRecord(ctx, &pb.GetRecordRequest{Name: tr.GetAnnotations()[annotation.Record]}); err != nil {
+	if _, err := results.GetRecord(ctx, &rpb.GetRecordRequest{Name: tr.GetAnnotations()[annotation.Record]}); err != nil {
 		t.Fatalf("GetRecord: %v", err)
 	}
 
@@ -236,14 +236,14 @@ func TestReconcile_PipelineRun(t *testing.T) {
 
 	t.Run("Result", func(t *testing.T) {
 		name := pr.GetAnnotations()[annotation.Result]
-		if _, err := results.GetResult(ctx, &pb.GetResultRequest{Name: name}); err != nil {
+		if _, err := results.GetResult(ctx, &rpb.GetResultRequest{Name: name}); err != nil {
 			t.Fatalf("GetResult: %v", err)
 		}
 	})
 
 	t.Run("Record", func(t *testing.T) {
 		name := pr.GetAnnotations()[annotation.Record]
-		_, err := results.GetRecord(ctx, &pb.GetRecordRequest{Name: name})
+		_, err := results.GetRecord(ctx, &rpb.GetRecordRequest{Name: name})
 		if err != nil {
 			t.Fatalf("GetRecord: %v", err)
 		}

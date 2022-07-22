@@ -19,27 +19,29 @@ package main
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"k8s.io/client-go/kubernetes"
+	"knative.dev/pkg/injection"
 	"log"
 	"os"
+	"strings"
 	"time"
 
-	creds "github.com/tektoncd/results/pkg/watcher/grpc"
+	cred "github.com/tektoncd/results/pkg/watcher/grpc"
 	"github.com/tektoncd/results/pkg/watcher/reconciler"
 	"github.com/tektoncd/results/pkg/watcher/reconciler/pipelinerun"
 	"github.com/tektoncd/results/pkg/watcher/reconciler/taskrun"
-	v1alpha2pb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	rpb "github.com/tektoncd/results/proto/results/v1alpha2"
 	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/oauth"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"k8s.io/client-go/transport"
 	"knative.dev/pkg/configmap"
 	"knative.dev/pkg/controller"
-	"knative.dev/pkg/injection"
 	"knative.dev/pkg/injection/sharedmain"
 	"knative.dev/pkg/signals"
 	_ "knative.dev/pkg/system/testing"
@@ -51,11 +53,14 @@ const (
 )
 
 var (
-	apiAddr                 = flag.String("api_addr", "localhost:50051", "Address of API server to report to")
-	authMode                = flag.String("auth_mode", "", "Authentication mode to use when making requests. If not set, no additional credentials will be used in the request. Valid values: [google]")
-	disableCRDUpdate        = flag.Bool("disable_crd_update", false, "Disables Tekton CRD annotation update on reconcile.")
-	authToken               = flag.String("token", "", "Authentication token to use in requests. If not specified, on-cluster configuration is assumed.")
+	apiServer               = flag.String("api-server", "localhost:50051", "Address of API server to report to")
+	authMode                = flag.String("auth-mode", "token", "Authentication mode to use when making requests. If not set, no additional credentials will be used in the request. Valid values: [google]")
+	authToken               = flag.String("auth-token", "", "Authentication token to use in requests. If not specified, on-cluster configuration is assumed.")
+	authServiceAccount      = flag.String("auth-service-account", "tekton-results:tekton-results", "Service account to use for authentication. Format: [namespace:serviceaccount].")
+	crdUpdate               = flag.Bool("crd-update", false, "Enable/Disables Tekton CRD annotation update on reconcile.")
 	completedRunGracePeriod = flag.Duration("completed_run_grace_period", 0, "Grace period duration before Runs should be deleted. If 0, Runs will not be deleted. If < 0, Runs will be deleted immediately.")
+	tlsCert                 = flag.String("tls-cert", "/etc/tls/tls.crt", "Certificate to connect the API server")
+	tlsOverride             = flag.String("tls-override", "", "TLS server name override")
 )
 
 func main() {
@@ -63,19 +68,35 @@ func main() {
 	// TODO: Enable leader election.
 	ctx := sharedmain.WithHADisabled(signals.NewContext())
 
-	conn, err := connectToAPIServer(ctx, *apiAddr, *authMode)
+	conn, err := connectToAPIServer(ctx, *apiServer, *authMode)
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
+		log.Fatalf("Failed to connect: %v", err)
 	}
 	defer conn.Close()
-	results := v1alpha2pb.NewResultsClient(conn)
+	results := rpb.NewResultsClient(conn)
+
+	config := injection.ParseAndGetRESTConfigOrDie()
+
+	// creates the clientset
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Fatalf("failed to create kubernetes client: %v", err)
+	}
+
+	sa := strings.Split(*authServiceAccount, ":")
 
 	cfg := &reconciler.Config{
-		DisableAnnotationUpdate:      *disableCRDUpdate,
+		Auth: reconciler.Auth{
+			AuthMode:                *authMode,
+			ServiceAccount:          sa[1],
+			ServiceAccountNamespace: sa[0],
+		},
+		KubeClient:                   clientset,
+		DisableAnnotationUpdate:      *crdUpdate,
 		CompletedResourceGracePeriod: *completedRunGracePeriod,
 	}
 
-	sharedmain.MainWithContext(injection.WithNamespaceScope(ctx, ""), "watcher",
+	sharedmain.MainWithConfig(ctx, "watcher", config,
 		func(ctx context.Context, cmw configmap.Watcher) *controller.Impl {
 			return pipelinerun.NewControllerWithConfig(ctx, results, cfg)
 		}, func(ctx context.Context, cmw configmap.Watcher) *controller.Impl {
@@ -84,13 +105,12 @@ func main() {
 	)
 }
 
-func connectToAPIServer(ctx context.Context, apiAddr string, authMode string) (*grpc.ClientConn, error) {
+func connectToAPIServer(ctx context.Context, apiServer string, authMode string) (*grpc.ClientConn, error) {
 	// Load TLS certs
-	certs, err := loadCerts()
+	creds, err := credentials.NewClientTLSFromFile(*tlsCert, "")
 	if err != nil {
-		log.Fatalf("error loading cert pool: %v", err)
+		log.Fatal("error loading TLS certificate: ", err)
 	}
-	cred := credentials.NewClientTLSFromCert(certs, "")
 
 	opts := []grpc.DialOption{
 		grpc.WithBlock(),
@@ -99,29 +119,35 @@ func connectToAPIServer(ctx context.Context, apiAddr string, authMode string) (*
 	switch authMode {
 	case "google":
 		opts = append(opts,
-			grpc.WithAuthority(apiAddr),
-			grpc.WithTransportCredentials(cred),
-			grpc.WithDefaultCallOptions(grpc.PerRPCCredentials(creds.Google())),
+			grpc.WithAuthority(apiServer),
+			grpc.WithTransportCredentials(creds),
+			grpc.WithDefaultCallOptions(grpc.PerRPCCredentials(cred.Google())),
 		)
 	case "token":
-		var ts oauth2.TokenSource
 		if t := *authToken; t != "" {
-			ts = oauth2.StaticTokenSource(&oauth2.Token{AccessToken: t})
+			opts = append(opts,
+				grpc.WithDefaultCallOptions(grpc.PerRPCCredentials(oauth.TokenSource{
+					TokenSource: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: t}),
+				})),
+				grpc.WithTransportCredentials(creds),
+			)
 		} else {
-			ts = transport.NewCachedFileTokenSource(podTokenPath)
+			return nil, errors.New("token parameter must be provide when auth mode is set to 'token'")
 		}
-		opts = append(opts,
-			grpc.WithDefaultCallOptions(grpc.PerRPCCredentials(oauth.TokenSource{TokenSource: ts})),
-			grpc.WithTransportCredentials(cred),
-		)
+	case "service-account":
+		if sa := strings.Split(*authServiceAccount, ":"); len(sa) == 2 {
+			opts = append(opts, grpc.WithTransportCredentials(creds))
+		} else {
+			return nil, errors.New("invalid service account name passed in parameter. Format - Namespace:ServiceAccountName")
+		}
 	case "insecure":
 		opts = append(opts, grpc.WithInsecure())
 	}
 
-	log.Printf("dialing %s...\n", apiAddr)
+	log.Printf("dialing %s...\n", apiServer)
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	return grpc.DialContext(ctx, apiAddr, opts...)
+	return grpc.DialContext(ctx, apiServer, opts...)
 }
 
 func loadCerts() (*x509.CertPool, error) {

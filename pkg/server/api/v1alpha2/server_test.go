@@ -12,6 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate protoc --go_out=. --go_opt=paths=source_relative  --go-grpc_out=. --go-grpc_opt=paths=source_relative -I$GOPATH/src/github.com/googleapis/googleapis -I. common.proto taskrun.proto pipelinerun.proto
+package v1alpha2
 
-package v1beta1
+import (
+	"fmt"
+	"os"
+	"sync/atomic"
+	"testing"
+
+	cw "github.com/jonboulle/clockwork"
+)
+
+var (
+	// Used for deterministically increasing UUID generation.
+	lastID                 = uint32(0)
+	fakeClock cw.FakeClock = cw.NewFakeClock()
+)
+
+func TestMain(m *testing.M) {
+	uid = func() string {
+		return fmt.Sprint(atomic.AddUint32(&lastID, 1))
+	}
+	clock = fakeClock
+	os.Exit(m.Run())
+}
