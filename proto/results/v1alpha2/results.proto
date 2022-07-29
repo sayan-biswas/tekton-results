@@ -101,6 +101,43 @@ service Results {
     };
     option (google.api.method_signature) = "name";
   }
+
+  rpc GetLog(GetLogRequest) returns (Log) {
+    option (google.api.http) = {
+      get: "/v1alpha2/{name=clusters/*/namespaces/*/results/*/logs/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc ListLogs(ListLogsRequest) returns (ListLogsResponse) {
+    option (google.api.http) = {
+      get: "/v1alpha2/{parent=clusters/*/namespaces/*/results/*}/logs"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  rpc CreateLog(CreateLogRequest) returns (Log) {
+    option (google.api.http) = {
+      post: "/v1alpha2/{parent=clusters/*/namespaces/*/results/*}/logs"
+      body: "log"
+    };
+    option (google.api.method_signature) = "parent,log";
+  }
+
+  rpc UpdateLog(UpdateLogRequest) returns (Log) {
+    option (google.api.http) = {
+      patch: "/v1alpha2/{record.name=clusters/*/namespaces/*/results/*/logs/*}"
+      body: "log"
+    };
+    option (google.api.method_signature) = "log,update_mask";
+  }
+
+  rpc DeleteLog(DeleteLogRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1alpha2/{name=clusters/*/namespaces/*/results/*/logs/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
 }
 
 message GetResultRequest {
@@ -253,7 +290,7 @@ message CreateRecordRequest {
 message UpdateRecordRequest {
   // The record to update.
   //
-  // The record's `name` field is used to identify the book to update.
+  // The record's `name` field is used to identify the record to update.
   // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}/records/{record}
   Record record = 1 [(google.api.field_behavior) = REQUIRED];
 
@@ -274,3 +311,91 @@ message DeleteRecordRequest {
       type: "tekton.results.v1alpha2/Record"
     }];
 }
+
+message GetLogRequest {
+  // Name of the log to retrieve.
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}/logs/{record}
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Log"
+    }];
+}
+
+message ListLogsRequest {
+  // The parent, which owns this collection of logs.
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Result"
+      child_type: "tekton.results.v1alpha2/Log"
+    }];
+
+  // CEL filter string
+  string filter = 2;
+
+  // Order collection
+  string order_by = 3;
+
+  // The maximum number of results to return. The service may return fewer than
+  // this value.
+  // If unspecified, at most 50 results will be returned.
+  // The maximum value is 1000; values above 1000 will be coerced to 1000.
+  int32 page_size = 4;
+
+  // A page token, received from a previous `ListRecords` call.
+  // Provide this to retrieve the subsequent page.
+  //
+  // When paginating, all other parameters provided to `ListRecords` must match
+  // the call that provided the page token.
+  string page_token = 5;
+}
+
+message ListLogsResponse {
+  // The collection of logs
+  repeated Record records = 1;
+
+  // A token, which can be sent as `page_token` to retrieve the next page.
+  // If this field is omitted, there are no subsequent pages.
+  string next_page_token = 2;
+}
+
+message CreateLogRequest {
+  // Parent resource where the log will be created.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Result"
+      child_type: "tekton.results.v1alpha2/Log"
+    }];
+
+  // The record to create
+  Record record = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateLogRequest {
+  // The log to update.
+  //
+  // The log's `name` field is used to identify the log to update.
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}/logs/{log}
+  Record record = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The list of fields to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // The etag for this result.
+  // If this is provided on update, it must match the server's etag.
+  string etag = 3;
+}
+
+message DeleteLogRequest {
+  // Name of the log to delete.
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}/logs/{log}
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Log"
+    }];
+}
+

@@ -15,10 +15,6 @@
 package record
 
 import (
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/google/go-cmp/cmp"
 	"github.com/jonboulle/clockwork"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
@@ -31,6 +27,8 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"strings"
+	"testing"
 )
 
 var clock clockwork.Clock = clockwork.NewFakeClock()
@@ -86,7 +84,7 @@ func TestParseName(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			parent, result, name, err := ParseName(tc.in)
+			cluster, namespace, result, name, err := ParseName(tc.in)
 			if err != nil {
 				if tc.want == nil {
 					// error was expected, continue
@@ -95,10 +93,10 @@ func TestParseName(t *testing.T) {
 				t.Fatal(err)
 			}
 			if tc.want == nil {
-				t.Fatalf("expected error, got: [%s, %s]", parent, name)
+				t.Fatalf("expected error, got: [%s, %s, %s]", cluster, namespace, name)
 			}
-			if parent != tc.want[0] || result != tc.want[1] || name != tc.want[2] {
-				t.Errorf("want: %v, got: [%s, %s, %s]", tc.want, parent, result, name)
+			if cluster != tc.want[0] || namespace != tc.want[1] || result != tc.want[2] || name != tc.want[3] {
+				t.Errorf("want: %v, got: [%, %s, %s, %s]", tc.want, cluster, namespace, result, name)
 			}
 		})
 	}
@@ -120,9 +118,9 @@ func TestToStorage(t *testing.T) {
 				Data: &rpb.Any{
 					Value: jsonutil.AnyBytes(t, data),
 				},
-				CreatedTime: timestamppb.New(clock.Now()),
-				UpdatedTime: timestamppb.New(clock.Now()),
-				Etag:        "tacocat",
+				CreateTime: timestamppb.New(clock.Now()),
+				UpdateTime: timestamppb.New(clock.Now()),
+				Etag:       "tacocat",
 			},
 			want: &models.Record{
 				Parent:      "foo",
@@ -139,9 +137,9 @@ func TestToStorage(t *testing.T) {
 		{
 			name: "missing data",
 			in: &rpb.Record{
-				Name:        "foo/results/bar",
-				Id:          "a",
-				CreatedTime: timestamppb.New(clock.Now()),
+				Name:       "foo/results/bar",
+				Id:         "a",
+				CreateTime: timestamppb.New(clock.Now()),
 			},
 			want: &models.Record{
 				Parent:      "foo",
@@ -156,16 +154,13 @@ func TestToStorage(t *testing.T) {
 			name: "deprecated fields", // If deprecated fields do not match their non-deprecated counterparts, prefer non-deprecated.
 			in: &rpb.Record{
 				Name: "foo/results/bar",
-				Uid:  "a",
-				Id:   "b",
+				Id:   "a",
 				Data: &rpb.Any{
 					Value: jsonutil.AnyBytes(t, data),
 				},
-				CreatedTime: timestamppb.New(clock.Now().Add(1 * time.Minute)),
-				CreateTime:  timestamppb.New(clock.Now()),
-				UpdatedTime: timestamppb.New(clock.Now().Add(1 * time.Minute)),
-				UpdateTime:  timestamppb.New(clock.Now()),
-				Etag:        "tacocat",
+				CreateTime: timestamppb.New(clock.Now()),
+				UpdateTime: timestamppb.New(clock.Now()),
+				Etag:       "tacocat",
 			},
 			want: &models.Record{
 				Parent:      "foo",
@@ -181,7 +176,7 @@ func TestToStorage(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := ToStorage("foo", "bar", "1", "baz", tc.in)
+			got, err := ToStorage(tc.in)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -219,7 +214,7 @@ func TestToStorage(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := ToStorage("foo", "bar", "1", "baz", tc.in)
+			got, err := ToStorage(tc.in)
 			if status.Code(err) != tc.want {
 				t.Fatalf("expected %v, got (%v, %v)", tc.want, got, err)
 			}
@@ -249,13 +244,11 @@ func TestToAPI(t *testing.T) {
 			want: &rpb.Record{
 				Name: "foo/results/bar/records/baz",
 				Id:   "a",
-				Uid:  "a",
 				Data: &rpb.Any{
 					Value: jsonutil.AnyBytes(t, data),
 				},
-				CreatedTime: timestamppb.New(clock.Now()),
-				CreateTime:  timestamppb.New(clock.Now()),
-				Etag:        "etag",
+				CreateTime: timestamppb.New(clock.Now()),
+				Etag:       "etag",
 			},
 		},
 		{
@@ -270,7 +263,6 @@ func TestToAPI(t *testing.T) {
 			want: &rpb.Record{
 				Name: "foo/results/bar/records/baz",
 				Id:   "a",
-				Uid:  "a",
 			},
 		},
 	} {

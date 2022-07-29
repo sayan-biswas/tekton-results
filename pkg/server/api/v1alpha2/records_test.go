@@ -17,6 +17,7 @@ package v1alpha2
 import (
 	"context"
 	"fmt"
+	"gorm.io/gorm"
 	"strconv"
 	"testing"
 	"time"
@@ -72,10 +73,7 @@ func TestCreateRecord(t *testing.T) {
 		}
 		want := proto.Clone(req.GetRecord()).(*rpb.Record)
 		want.Id = fmt.Sprint(lastID)
-		want.Uid = fmt.Sprint(lastID)
-		want.CreatedTime = timestamppb.New(clock.Now())
 		want.CreateTime = timestamppb.New(clock.Now())
-		want.UpdatedTime = timestamppb.New(clock.Now())
 		want.UpdateTime = timestamppb.New(clock.Now())
 		want.Etag = mockEtag(lastID, clock.Now().UnixNano())
 
@@ -152,7 +150,7 @@ func TestCreateRecord_ConcurrentDelete(t *testing.T) {
 	res := "deleted"
 	srv, err := New(
 		test.NewDB(t),
-		withGetResultID(func(context.Context, string, string) (string, error) {
+		withGetResultID(func(context.Context, *gorm.DB, string, string) (string, error) {
 			return res, nil
 		}),
 	)
@@ -635,9 +633,8 @@ func TestUpdateRecord(t *testing.T) {
 			}
 
 			proto.Merge(rec, tc.diff)
-			rec.UpdatedTime = timestamppb.New(clock.Now())
 			rec.UpdateTime = timestamppb.New(clock.Now())
-			rec.Etag = mockEtag(lastID, rec.UpdatedTime.AsTime().UnixNano())
+			rec.Etag = mockEtag(lastID, rec.UpdateTime.AsTime().UnixNano())
 
 			if diff := cmp.Diff(rec, got, protocmp.Transform()); diff != "" {
 				t.Error(diff)

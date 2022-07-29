@@ -21,7 +21,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	ppb "github.com/tektoncd/results/proto/pipeline/v1beta1/pipeline_go_proto"
+	ppb "github.com/tektoncd/results/proto/pipeline/v1beta1"
 )
 
 var (

@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	pb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	pb "github.com/tektoncd/results/proto/results/v1alpha2"
 	"github.com/tektoncd/results/tools/tkn-results/internal/flags"
 	"github.com/tektoncd/results/tools/tkn-results/internal/format"
 )

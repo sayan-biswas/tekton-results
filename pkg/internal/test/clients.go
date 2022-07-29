@@ -19,9 +19,9 @@ import (
 	"net"
 	"testing"
 
-	"github.com/tektoncd/results/pkg/server/api/v1alpha2/server"
+	"github.com/tektoncd/results/pkg/server/api/v1alpha2"
 	"github.com/tektoncd/results/pkg/server/db/test"
-	rpb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	rpb "github.com/tektoncd/results/proto/results/v1alpha2"
 	"google.golang.org/grpc"
 )
 
@@ -29,9 +29,9 @@ const (
 	port = ":0"
 )
 
-func NewResultsClient(t *testing.T, opts ...server.Option) rpb.ResultsClient {
+func NewResultsClient(t *testing.T, opts ...v1alpha2.Option) rpb.ResultsClient {
 	t.Helper()
-	srv, err := server.New(test.NewDB(t), opts...)
+	srv, err := v1alpha2.New(test.NewDB(t), opts...)
 	if err != nil {
 		t.Fatalf("Failed to create fake server: %v", err)
 	}

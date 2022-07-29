@@ -7,7 +7,7 @@ import (
 	"github.com/golang/protobuf/ptypes/duration"
 	tpb "github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	ppb "github.com/tektoncd/results/proto/pipeline/v1beta1/pipeline_go_proto"
+	ppb "github.com/tektoncd/results/proto/pipeline/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/apis"

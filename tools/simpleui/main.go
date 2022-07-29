@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
-	pb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	rpb "github.com/tektoncd/results/proto/results/v1alpha2"
 	"google.golang.org/grpc"
 )
 
@@ -28,7 +28,7 @@ func (u *ui) home(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *ui) results(w http.ResponseWriter, r *http.Request) {
-	res, err := u.client.ListResults(r.Context(), &pb.ListResultsRequest{
+	res, err := u.client.ListResults(r.Context(), &rpb.ListResultsRequest{
 		Parent: strings.Trim(r.URL.Path, "/"),
 	})
 	if err != nil {
@@ -42,7 +42,7 @@ func (u *ui) results(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *ui) records(w http.ResponseWriter, r *http.Request) {
-	req := &pb.ListRecordsRequest{
+	req := &rpb.ListRecordsRequest{
 		Parent: strings.Trim(r.URL.Path, "/"),
 		Filter: r.FormValue("query"),
 	}
@@ -53,8 +53,8 @@ func (u *ui) records(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := recordTmpl.Execute(w, struct {
-		Request  *pb.ListRecordsRequest
-		Response *pb.ListRecordsResponse
+		Request  *rpb.ListRecordsRequest
+		Response *rpb.ListRecordsResponse
 	}{
 		Request:  req,
 		Response: res,
@@ -64,7 +64,7 @@ func (u *ui) records(w http.ResponseWriter, r *http.Request) {
 }
 
 type ui struct {
-	client pb.ResultsClient
+	client rpb.ResultsClient
 }
 
 func main() {
@@ -74,7 +74,7 @@ func main() {
 	}
 	defer conn.Close()
 	u := &ui{
-		client: pb.NewResultsClient(conn),
+		client: rpb.NewResultsClient(conn),
 	}
 
 	r := mux.NewRouter()

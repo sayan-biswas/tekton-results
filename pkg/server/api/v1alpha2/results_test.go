@@ -58,8 +58,8 @@ func TestCreateResult(t *testing.T) {
 		}
 		want := proto.Clone(req.GetResult()).(*rpb.Result)
 		want.Id = fmt.Sprint(lastID)
-		want.CreatedTime = timestamppb.New(clock.Now())
-		want.UpdatedTime = timestamppb.New(clock.Now())
+		want.CreateTime = timestamppb.New(clock.Now())
+		want.UpdateTime = timestamppb.New(clock.Now())
 		want.Etag = mockEtag(lastID, clock.Now().UnixNano())
 
 		if diff := cmp.Diff(got, want, protocmp.Transform()); diff != "" {
@@ -206,7 +206,7 @@ func TestUpdateResult(t *testing.T) {
 			if tc.requestName == "" {
 				tc.requestName = created.GetName()
 			}
-			updated, err := srv.UpdateResult(ctx, &rpb.UpdateResultRequest{Result: tc.update, Name: tc.requestName, Etag: tc.etag})
+			updated, err := srv.UpdateResult(ctx, &rpb.UpdateResultRequest{Result: tc.update, Etag: tc.etag})
 			if err != nil || tc.errcode != codes.OK {
 				if status.Code(err) == tc.errcode {
 					return
@@ -215,7 +215,6 @@ func TestUpdateResult(t *testing.T) {
 			}
 
 			proto.Merge(tc.expect, created)
-			tc.expect.UpdatedTime = timestamppb.New(clock.Now())
 			tc.expect.UpdateTime = timestamppb.New(clock.Now())
 			tc.expect.Etag = mockEtag(lastID, clock.Now().UnixNano())
 

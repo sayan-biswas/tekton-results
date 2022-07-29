@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	pb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	pb "github.com/tektoncd/results/proto/results/v1alpha2"
 	"github.com/tektoncd/results/tools/tkn-results/internal/config"
 	"golang.org/x/oauth2"
 	"google.golang.org/grpc"

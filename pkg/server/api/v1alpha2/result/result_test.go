@@ -15,12 +15,10 @@
 package result
 
 import (
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/google/go-cmp/cmp"
 	"knative.dev/pkg/ptr"
+	"strings"
+	"testing"
 
 	"github.com/jonboulle/clockwork"
 	"github.com/tektoncd/results/pkg/server/cel"
@@ -43,7 +41,7 @@ func TestParseName(t *testing.T) {
 	}{
 		{
 			name: "simple",
-			in:   "a/results/b",
+			in:   "clusters/a/namespaces/b/results/c",
 			want: []string{"a", "b"},
 		},
 		{
@@ -81,7 +79,7 @@ func TestParseName(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			parent, name, err := ParseName(tc.in)
+			cluster, namespace, name, err := ParseName(tc.in)
 			if err != nil {
 				if tc.want == nil {
 					// error was expected, continue
@@ -90,11 +88,11 @@ func TestParseName(t *testing.T) {
 				t.Fatal(err)
 			}
 			if tc.want == nil {
-				t.Fatalf("expected error, got: [%s, %s]", parent, name)
+				t.Fatalf("expected error, got: [%s, %s, %s]", cluster, namespace, name)
 			}
 
-			if parent != tc.want[0] || name != tc.want[1] {
-				t.Errorf("want: %v, got: [%s, %s]", tc.want, parent, name)
+			if cluster != tc.want[0] || namespace != tc.want[1] || name != tc.want[2] {
+				t.Errorf("want: %v, got: [%s, %s, %s]", tc.want, cluster, namespace, name)
 			}
 		})
 	}
@@ -111,8 +109,8 @@ func TestToStorage(t *testing.T) {
 			in: &rpb.Result{
 				Name:        "foo/results/bar",
 				Id:          "a",
-				CreatedTime: timestamppb.New(clock.Now()),
-				UpdatedTime: timestamppb.New(clock.Now()),
+				CreateTime:  timestamppb.New(clock.Now()),
+				UpdateTime:  timestamppb.New(clock.Now()),
 				Annotations: map[string]string{"a": "b"},
 				Etag:        "tacocat",
 				Summary: &rpb.RecordSummary{
@@ -146,11 +144,8 @@ func TestToStorage(t *testing.T) {
 			name: "deprecated fields",
 			in: &rpb.Result{
 				Name:        "foo/results/bar",
-				Uid:         "a",
-				Id:          "b",
-				CreatedTime: timestamppb.New(clock.Now().Add(time.Minute)),
+				Id:          "a",
 				CreateTime:  timestamppb.New(clock.Now()),
-				UpdatedTime: timestamppb.New(clock.Now().Add(time.Minute)),
 				UpdateTime:  timestamppb.New(clock.Now()),
 				Annotations: map[string]string{"a": "b"},
 				Etag:        "tacocat",
@@ -230,10 +225,7 @@ func TestToAPI(t *testing.T) {
 	want := &rpb.Result{
 		Name:        "foo/results/bar",
 		Id:          "a",
-		Uid:         "a",
-		CreatedTime: timestamppb.New(clock.Now()),
 		CreateTime:  timestamppb.New(clock.Now()),
-		UpdatedTime: timestamppb.New(clock.Now()),
 		UpdateTime:  timestamppb.New(clock.Now()),
 		Annotations: ann,
 		Etag:        "etag",
@@ -252,7 +244,7 @@ func TestMatch(t *testing.T) {
 	r := &rpb.Result{
 		Name:        "foo",
 		Id:          "bar",
-		CreatedTime: timestamppb.Now(),
+		CreateTime:  timestamppb.Now(),
 		Annotations: map[string]string{"a": "b"},
 		Etag:        "tacocat",
 	}

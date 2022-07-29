@@ -16,12 +16,12 @@ package dynamic
 
 import (
 	"context"
-	"github.com/tektoncd/results/pkg/internal/kcp"
+	"github.com/jonboulle/clockwork"
+	"github.com/kcp-dev/kcp/pkg/syncer/shared"
 	"github.com/tektoncd/results/pkg/server/api/v1alpha2/result"
 	"google.golang.org/grpc/metadata"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/tektoncd/results/pkg/watcher/convert"
 	"github.com/tektoncd/results/pkg/watcher/reconciler"
 	"github.com/tektoncd/results/pkg/watcher/reconciler/annotation"
@@ -79,7 +79,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, object results.Object) error
 	}
 
 	// Get KCP namespace locator
-	nl, ok, err := kcp.LocatorFromAnnotations(ns.Annotations)
+	nl, ok, err := shared.LocatorFromAnnotations(ns.Annotations)
 	if err != nil {
 		log.Errorf("error getting cluster and namespace: %v", err)
 		return err
@@ -93,7 +93,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, object results.Object) error
 	if r.cfg.Auth.AuthMode == "service-account" {
 		sanl := *nl
 		sanl.Namespace = r.cfg.Auth.ServiceAccountNamespace
-		sans, err := kcp.PhysicalClusterNamespaceName(sanl)
+		sans, err := shared.PhysicalClusterNamespaceName(sanl)
 		if err != nil {
 			log.Errorf("cannot determine KCP service account workspace: %v", err)
 			return err

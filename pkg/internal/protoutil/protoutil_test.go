@@ -27,8 +27,8 @@ func TestClearOutputOnly(t *testing.T) {
 	m := &rpb.Result{
 		Name:        "a",
 		Id:          "b",
-		CreatedTime: timestamppb.Now(),
-		UpdatedTime: timestamppb.Now(),
+		CreateTime:  timestamppb.Now(),
+		UpdateTime:  timestamppb.Now(),
 		Annotations: map[string]string{"c": "d"},
 		Etag:        "f",
 	}
