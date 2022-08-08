@@ -1,2 +1,14 @@
-results.db
+# IDE
 .vscode
+.idea
+
+# Testing
+temp
+bin
+result.db
+
+# Certs
+**/*.crt
+**/*.key
+**/*.ca
+**/*.pem
