@@ -19,6 +19,7 @@ package convert
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/tektoncd/results/pkg/apis/v1alpha2"
 	"testing"
 	"time"
 
@@ -69,39 +70,37 @@ var (
 			Timeout: &metav1.Duration{Duration: time.Hour},
 			TaskSpec: &v1beta1.TaskSpec{
 				Steps: []v1beta1.Step{{
-					Script: "script",
-					Container: corev1.Container{
-						Name:       "name",
-						Image:      "image",
-						Command:    []string{"cmd1", "cmd2"},
-						Args:       []string{"arg1", "arg2"},
-						WorkingDir: "workingdir",
-						Env: []corev1.EnvVar{{
-							Name:  "env1",
-							Value: "ENV1",
-						}, {
-							Name:  "env2",
-							Value: "ENV2",
-						}},
-						VolumeMounts: []corev1.VolumeMount{{
-							Name:      "vm1",
-							MountPath: "path1",
-							ReadOnly:  false,
-							SubPath:   "subpath1",
-						}, {
-							Name:      "vm2",
-							MountPath: "path2",
-							ReadOnly:  true,
-							SubPath:   "subpath2",
-						}},
-					},
+					Script:     "script",
+					Name:       "name",
+					Image:      "image",
+					Command:    []string{"cmd1", "cmd2"},
+					Args:       []string{"arg1", "arg2"},
+					WorkingDir: "workingdir",
+					Env: []corev1.EnvVar{{
+						Name:  "env1",
+						Value: "ENV1",
+					}, {
+						Name:  "env2",
+						Value: "ENV2",
+					}},
+					VolumeMounts: []corev1.VolumeMount{{
+						Name:      "vm1",
+						MountPath: "path1",
+						ReadOnly:  false,
+						SubPath:   "subpath1",
+					}, {
+						Name:      "vm2",
+						MountPath: "path2",
+						ReadOnly:  true,
+						SubPath:   "subpath2",
+					}},
 				}, {
-					Container: corev1.Container{Name: "step2"},
+					Name: "step2",
 				}},
 				Sidecars: []v1beta1.Sidecar{{
-					Container: corev1.Container{Name: "sidecar1"},
+					Name: "sidecar1",
 				}, {
-					Container: corev1.Container{Name: "sidecar2"},
+					Name: "sidecar2",
 				}},
 				Volumes: []corev1.Volume{{
 					Name:         "volname1",
@@ -193,32 +192,30 @@ var (
 						},
 						TaskSpec: v1beta1.TaskSpec{
 							Steps: []v1beta1.Step{{
-								Script: "script",
-								Container: corev1.Container{
-									Name:       "name",
-									Image:      "image",
-									Command:    []string{"cmd1", "cmd2"},
-									Args:       []string{"arg1", "arg2"},
-									WorkingDir: "workingdir",
-									Env: []corev1.EnvVar{{
-										Name:  "env1",
-										Value: "ENV1",
-									}, {
-										Name:  "env2",
-										Value: "ENV2",
-									}},
-									VolumeMounts: []corev1.VolumeMount{{
-										Name:      "vm1",
-										MountPath: "path1",
-										ReadOnly:  false,
-										SubPath:   "subpath1",
-									}, {
-										Name:      "vm2",
-										MountPath: "path2",
-										ReadOnly:  true,
-										SubPath:   "subpath2",
-									}},
-								},
+								Script:     "script",
+								Name:       "name",
+								Image:      "image",
+								Command:    []string{"cmd1", "cmd2"},
+								Args:       []string{"arg1", "arg2"},
+								WorkingDir: "workingdir",
+								Env: []corev1.EnvVar{{
+									Name:  "env1",
+									Value: "ENV1",
+								}, {
+									Name:  "env2",
+									Value: "ENV2",
+								}},
+								VolumeMounts: []corev1.VolumeMount{{
+									Name:      "vm1",
+									MountPath: "path1",
+									ReadOnly:  false,
+									SubPath:   "subpath1",
+								}, {
+									Name:      "vm2",
+									MountPath: "path2",
+									ReadOnly:  true,
+									SubPath:   "subpath2",
+								}},
 							}},
 							Sidecars: []v1beta1.Sidecar{{}},
 							Volumes: []corev1.Volume{{
@@ -311,6 +308,53 @@ func TestToProto(t *testing.T) {
 		}
 	})
 
+}
+
+func TestToLogProto(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		in         metav1.Object
+		recordName string
+		want       *v1alpha2.TaskRunLog
+	}{
+		{
+			name:       "TaskRun",
+			in:         taskrun,
+			recordName: fmt.Sprintf("%s/results/%s/records/%s", taskrun.Namespace, "test-pipeline", "taskrun-log"),
+			want: &v1alpha2.TaskRunLog{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "TaskRunLog",
+					APIVersion: "results.tekton.dev/v1alpha2",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: taskrun.Namespace,
+					Name:      fmt.Sprintf("%s-log", taskrun.Name),
+				},
+				Spec: v1alpha2.TaskRunLogSpec{
+					Ref: v1alpha2.TaskRunRef{
+						Namespace: taskrun.Namespace,
+						Name:      taskrun.Name,
+					},
+					RecordName: fmt.Sprintf("%s/results/%s/records/%s", taskrun.Namespace, "test-pipeline", "taskrun-log"),
+					Type:       v1alpha2.FileLogType,
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ToLogProto(tc.in, tc.recordName)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			wantData := &rpb.Any{
+				Type:  v1alpha2.TaskRunLogRecordType,
+				Value: toJSON(tc.want),
+			}
+			if d := cmp.Diff(wantData, got, protocmp.Transform()); d != "" {
+				t.Errorf("Diff(-want,+got): %s", d)
+			}
+		})
+	}
 }
 
 func toJSON(i interface{}) []byte {
