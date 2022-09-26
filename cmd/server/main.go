@@ -23,9 +23,9 @@ import (
 	prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/tektoncd/results/pkg/server/api/v1alpha2"
+	"github.com/tektoncd/results/pkg/server/api/v1alpha2/server"
 	"github.com/tektoncd/results/pkg/server/auth"
-	rpb "github.com/tektoncd/results/proto/results/v1alpha2"
+	rpb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
 	_ "go.uber.org/automaxprocs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -34,36 +34,32 @@ import (
 	"google.golang.org/grpc/reflection"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"k8s.io/client-go/rest"
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"path"
 )
 
 var (
-	apiAuth     = flag.Bool("api-auth", false, "Enable/Disable API auth")
-	dbHost      = flag.String("db-host", "", "Database host")
-	dbPort      = flag.String("db-port", "5432", "Database port")
-	dbName      = flag.String("db-name", "", "Database name")
-	dbUser      = flag.String("db-user", "", "Database user")
-	dbPassword  = flag.String("db-password", "", "Database password")
-	dbSSL       = flag.String("db-ssl", "disable", "Enable/Disable database SSL mode")
-	kubeServer  = flag.String("kube-server", "", "Kubernetes API server")
-	kubeCA      = flag.String("kube-ca", "/etc/tls/kube.ca", "Kubernetes API server CA File")
+	dbHost     = flag.String("db-host", "", "Database host")
+	dbPort     = flag.String("db-port", "5432", "Database port")
+	dbName     = flag.String("db-name", "", "Database name")
+	dbUser     = flag.String("db-user", "", "Database user")
+	dbPassword = flag.String("db-password", "", "Database password")
+	dbSSL      = flag.String("db-ssl", "disable", "Enable/Disable database SSL mode")
+	apiAuth    = flag.Bool("api-auth", false, "Enable/Disable API auth")
+	//kcpHost     = flag.String("kcp-host", "", "KCP API server host")
+	//kcpCA       = flag.String("kcp-ca", "", "KCP API Server CA")
+	//kubeConfig  = flag.String("kube-config", "", "KCP kube config file")
 	grpcPort    = flag.String("grpc-port", "50051", "GRPC API Port")
-	promPort    = flag.String("prometheus-port", "9090", "Prometheus Port")
 	restPort    = flag.String("rest-port", "8080", "REST API Port")
+	promPort    = flag.String("prometheus-port", "9090", "Prometheus Port")
 	tlsPath     = flag.String("tls-path", "/etc/tls", "TLS cert and key path")
 	tlsOverride = flag.String("tls-override", "", "TLS server name override")
 )
 
 func main() {
 	flag.Parse()
-
-	// Check parameters
-	*tlsPath = path.Clean(*tlsPath)
 
 	// Connect to the database.
 	if *dbHost == "" || *dbName == "" || *dbUser == "" || *dbPassword == "" {
@@ -85,20 +81,11 @@ func main() {
 	var authChecker auth.Checker
 	authChecker = auth.AllowAll{}
 	if *apiAuth {
-		kubeURL, err := url.Parse(*kubeServer)
-		if err != nil {
-			log.Fatal("Invalid kube server address: ", err)
-		}
-		authChecker = auth.NewRBAC(&rest.Config{
-			Host: kubeURL.String(),
-			TLSClientConfig: rest.TLSClientConfig{
-				CAFile: *kubeCA,
-			},
-		})
+		authChecker = auth.NewKCPAuth()
 	}
 
 	// Register API api(s)
-	v1a2, err := v1alpha2.New(db, v1alpha2.WithAuth(authChecker))
+	v1a2, err := server.New(db, server.WithAuth(authChecker))
 	if err != nil {
 		log.Fatal("Error creating GRPC server: ", err)
 	}
