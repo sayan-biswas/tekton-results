@@ -23,9 +23,9 @@ import (
 	prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/tektoncd/results/pkg/server/api/v1alpha2/server"
+	"github.com/tektoncd/results/pkg/server/api/v1alpha2"
 	"github.com/tektoncd/results/pkg/server/auth"
-	rpb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	rpb "github.com/tektoncd/results/proto/results/v1alpha2"
 	_ "go.uber.org/automaxprocs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -41,16 +41,13 @@ import (
 )
 
 var (
-	dbHost     = flag.String("db-host", "", "Database host")
-	dbPort     = flag.String("db-port", "5432", "Database port")
-	dbName     = flag.String("db-name", "", "Database name")
-	dbUser     = flag.String("db-user", "", "Database user")
-	dbPassword = flag.String("db-password", "", "Database password")
-	dbSSL      = flag.String("db-ssl", "disable", "Enable/Disable database SSL mode")
-	apiAuth    = flag.Bool("api-auth", false, "Enable/Disable API auth")
-	//kcpHost     = flag.String("kcp-host", "", "KCP API server host")
-	//kcpCA       = flag.String("kcp-ca", "", "KCP API Server CA")
-	//kubeConfig  = flag.String("kube-config", "", "KCP kube config file")
+	dbHost      = flag.String("db-host", "", "Database host")
+	dbPort      = flag.String("db-port", "5432", "Database port")
+	dbName      = flag.String("db-name", "", "Database name")
+	dbUser      = flag.String("db-user", "", "Database user")
+	dbPassword  = flag.String("db-password", "", "Database password")
+	dbSSL       = flag.String("db-ssl", "disable", "Enable/Disable database SSL mode")
+	apiAuth     = flag.Bool("api-auth", false, "Enable/Disable API auth")
 	grpcPort    = flag.String("grpc-port", "50051", "GRPC API Port")
 	restPort    = flag.String("rest-port", "8080", "REST API Port")
 	promPort    = flag.String("prometheus-port", "9090", "Prometheus Port")
@@ -85,7 +82,7 @@ func main() {
 	}
 
 	// Register API api(s)
-	v1a2, err := server.New(db, server.WithAuth(authChecker))
+	v1a2, err := v1alpha2.New(db, v1alpha2.WithAuth(authChecker))
 	if err != nil {
 		log.Fatal("Error creating GRPC server: ", err)
 	}

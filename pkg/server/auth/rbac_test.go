@@ -32,23 +32,23 @@ import (
 	test "k8s.io/client-go/testing"
 )
 
-func TestKCPAuth(t *testing.T) {
+func TestRBAC(t *testing.T) {
 	// Map of users -> tokens. The 'authorized' user has full permissions.
 	users := map[string]string{
 		"authorized":   "a",
 		"unauthorized": "b",
 	}
 	k8s := fake.NewSimpleClientset()
-	k8s.PrependReactor("create", "selfsubjectaccessreviews", func(action test.Action) (handled bool, ret runtime.Object, err error) {
-		ssar := action.(test.CreateActionImpl).Object.(*authzv1.SubjectAccessReview)
-		if ssar.Spec.User == "authorized" {
-			ssar.Status.Allowed = true
+	k8s.PrependReactor("create", "subjectaccessreviews", func(action test.Action) (handled bool, ret runtime.Object, err error) {
+		sar := action.(test.CreateActionImpl).Object.(*authzv1.SubjectAccessReview)
+		if sar.Spec.User == "authorized" {
+			sar.Status.Allowed = true
 		} else {
-			ssar.Status.Denied = true
+			sar.Status.Denied = true
 		}
-		return true, ssar, nil
+		return true, sar, nil
 	})
-	client := testclient.NewResultsClient(t, v1alpha2.WithAuth(auth.NewKCPAuth()))
+	client := testclient.NewResultsClient(t, v1alpha2.WithAuth(auth.NewRBAC()))
 
 	ctx := context.Background()
 	result := "foo/results/bar"

@@ -66,11 +66,11 @@ func (kcp *KCP) Check(ctx context.Context, cluster, namespace, resource, verb st
 	// Get token from authorization header
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return status.Error(codes.Unauthenticated, "Context metadata not found")
+		return status.Error(codes.Unauthenticated, "Metadata not found")
 	}
 	v := md.Get("authorization")
 	if len(v) == 0 {
-		return status.Error(codes.Unauthenticated, "Token not found")
+		return status.Error(codes.Unauthenticated, "Authorization header not found")
 	}
 	s := strings.SplitN(v[0], " ", 2)
 	if len(s) < 2 {
@@ -91,7 +91,7 @@ func (kcp *KCP) Check(ctx context.Context, cluster, namespace, resource, verb st
 	})
 	if err != nil {
 		log.Printf("Error creating cluster clientset: %v", err)
-		return status.Error(codes.Unauthenticated, "Authentication error")
+		return status.Error(codes.Aborted, "Internal Server Error")
 	}
 	authn := client.AuthenticationV1()
 	tr, err := authn.TokenReviews().Create(ctx, &authnv1.TokenReview{
@@ -101,17 +101,21 @@ func (kcp *KCP) Check(ctx context.Context, cluster, namespace, resource, verb st
 	}, metav1.CreateOptions{})
 	if err != nil {
 		log.Printf("Error creating TokenReview: %v", err)
-		return status.Error(codes.Unauthenticated, "Error validating token")
+		return status.Error(codes.Aborted, "Error validating token")
 	}
 	if !tr.Status.Authenticated {
-		return status.Error(codes.Unauthenticated, "Incorrect token")
+		return status.Error(codes.Unauthenticated,
+			fmt.Sprintf("User %s doesn't have access to workspace %s",
+				tr.Status.User.Username, cluster,
+			),
+		)
 	}
 
 	// Check resource access for user
 	client, err = kubernetes.NewForConfig(kcp.config)
 	if err != nil {
 		log.Printf("Error creating cluster clientset: %v", err)
-		return status.Error(codes.Unauthenticated, "Authentication error")
+		return status.Error(codes.Aborted, "Internal Server Error")
 	}
 	authz := client.AuthorizationV1()
 	sar, err := authz.SubjectAccessReviews().Create(ctx, &authzv1.SubjectAccessReview{
@@ -128,10 +132,15 @@ func (kcp *KCP) Check(ctx context.Context, cluster, namespace, resource, verb st
 	}, metav1.CreateOptions{})
 	if err != nil {
 		log.Println("Error creating SubjectAccessReview: ", err)
-		return status.Error(codes.Unauthenticated, "Unauthorized")
+		return status.Error(codes.Aborted, "Internal Server Error")
 	}
 	if !sar.Status.Allowed {
-		return status.Error(codes.Unauthenticated, "Unauthorized")
+		return status.Error(
+			codes.PermissionDenied,
+			fmt.Sprintf("User %s doesn't have access to %s %s in workspace %s",
+				tr.Status.User.Username, verb, resource, cluster,
+			),
+		)
 	}
 
 	return nil
