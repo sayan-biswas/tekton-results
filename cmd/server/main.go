@@ -34,21 +34,23 @@ import (
 	"google.golang.org/grpc/reflection"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"k8s.io/client-go/rest"
 	"log"
 	"net"
 	"net/http"
+	"path"
 )
 
 var (
-	dbHost      = flag.String("db-host", "", "Database host")
-	dbPort      = flag.String("db-port", "5432", "Database port")
-	dbName      = flag.String("db-name", "", "Database name")
-	dbUser      = flag.String("db-user", "", "Database user")
-	dbPassword  = flag.String("db-password", "", "Database password")
-	dbSSL       = flag.String("db-ssl", "disable", "Enable/Disable database SSL mode")
-	apiAuth     = flag.Bool("api-auth", false, "Enable/Disable API auth")
-	kubeHost    = flag.String("kube-host", "", "Kubernetes API server host")
+	dbHost     = flag.String("db-host", "", "Database host")
+	dbPort     = flag.String("db-port", "5432", "Database port")
+	dbName     = flag.String("db-name", "", "Database name")
+	dbUser     = flag.String("db-user", "", "Database user")
+	dbPassword = flag.String("db-password", "", "Database password")
+	dbSSL      = flag.String("db-ssl", "disable", "Enable/Disable database SSL mode")
+	apiAuth    = flag.Bool("api-auth", false, "Enable/Disable API auth")
+	//kcpHost     = flag.String("kcp-host", "", "KCP API server host")
+	//kcpCA       = flag.String("kcp-ca", "", "KCP API Server CA")
+	//kubeConfig  = flag.String("kube-config", "", "KCP kube config file")
 	grpcPort    = flag.String("grpc-port", "50051", "GRPC API Port")
 	restPort    = flag.String("rest-port", "8080", "REST API Port")
 	promPort    = flag.String("prometheus-port", "9090", "Prometheus Port")
@@ -70,7 +72,7 @@ func main() {
 	}
 
 	// Load server TLS cert
-	creds, err := credentials.NewServerTLSFromFile(*tlsPath+"/tls.crt", *tlsPath+"/tls.key")
+	creds, err := credentials.NewServerTLSFromFile(path.Join(*tlsPath, "tls.crt"), path.Join(*tlsPath, "tls.key"))
 	if err != nil {
 		log.Fatal("Error loading TLS key pair: ", err)
 	}
@@ -79,12 +81,7 @@ func main() {
 	var authChecker auth.Checker
 	authChecker = auth.AllowAll{}
 	if *apiAuth {
-		authChecker = auth.NewRBAC(&rest.Config{
-			Host: *kubeHost,
-			TLSClientConfig: rest.TLSClientConfig{
-				CAFile: *tlsPath + "/ca.crt",
-			},
-		})
+		authChecker = auth.NewKCPAuth()
 	}
 
 	// Register API api(s)
@@ -130,7 +127,7 @@ func main() {
 	}()
 
 	// Load client TLS cert
-	creds, err = credentials.NewClientTLSFromFile(*tlsPath+"/tls.crt", *tlsOverride)
+	creds, err = credentials.NewClientTLSFromFile(path.Join(*tlsPath, "tls.crt"), *tlsOverride)
 	if err != nil {
 		log.Fatal("Error loading TLS certificate: ", err)
 	}
@@ -148,5 +145,5 @@ func main() {
 
 	// Start HTTP server (and proxy calls to gRPC server endpoint)
 	log.Printf("REST server Listening on: %s", *restPort)
-	log.Fatal(http.ListenAndServeTLS(":"+*restPort, *tlsPath+"/tls.crt", *tlsPath+"/tls.key", mux))
+	log.Fatal(http.ListenAndServeTLS(":"+*restPort, path.Join(*tlsPath, "tls.crt"), path.Join(*tlsPath, "tls.key"), mux))
 }
