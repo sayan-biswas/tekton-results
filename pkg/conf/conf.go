@@ -8,6 +8,7 @@ type ConfigFile struct {
 	DB_NAME               string `mapstructure:"DB_NAME"`
 	DB_SSLMODE            string `mapstructure:"DB_SSLMODE"`
 	GRPC_PORT             string `mapstructure:"GRPC_PORT"`
+	KCP_CONFIG            string `mapstructure:"KCP_CONFIG"`
 	REST_PORT             string `mapstructure:"REST_PORT"`
 	PROMETHEUS_PORT       string `mapstructure:"PROMETHEUS_PORT"`
 	TLS_HOSTNAME_OVERRIDE string `mapstructure:"TLS_HOSTNAME_OVERRIDE"`

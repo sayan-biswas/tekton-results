@@ -148,7 +148,6 @@ func (c *Client) ensureResult(ctx context.Context, o Object, opts ...grpc.CallOp
 		return curr, nil
 	}
 	req := &pb.UpdateResultRequest{
-		Name:   name,
 		Result: new,
 	}
 	return c.ResultsClient.UpdateResult(ctx, req, opts...)

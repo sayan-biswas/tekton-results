@@ -15,12 +15,11 @@
 package result
 
 import (
+	"github.com/google/go-cmp/cmp"
+	"knative.dev/pkg/ptr"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/go-cmp/cmp"
-	"knative.dev/pkg/ptr"
 
 	cw "github.com/jonboulle/clockwork"
 	"github.com/tektoncd/results/pkg/api/server/cel"
@@ -43,33 +42,33 @@ func TestParseName(t *testing.T) {
 	}{
 		{
 			name: "simple",
-			in:   "a/results/b",
-			want: []string{"a", "b"},
+			in:   "clusters/a/namespaces/b/results/c",
+			want: []string{"a", "b", "c"},
 		},
 		{
 			name: "resource name reuse",
-			in:   "results/results/results",
-			want: []string{"results", "results"},
+			in:   "clusters/clusters/namespaces/namespaces/results/results",
+			want: []string{"clusters", "namespaces", "results"},
 		},
 		{
 			name: "missing name",
-			in:   "a/results/",
+			in:   "clusters/a/namespaces/b/results/",
 		},
 		{
 			name: "missing name, no slash",
-			in:   "a/results",
+			in:   "clusters/a/namespaces/b/results",
 		},
 		{
 			name: "missing parent",
-			in:   "/results/b",
+			in:   "/results/a",
 		},
 		{
 			name: "missing parent, no slash",
-			in:   "results/b",
+			in:   "results/a",
 		},
 		{
 			name: "wrong resource",
-			in:   "a/record/b",
+			in:   "clusters/a/namespaces/b/record/c",
 		},
 		{
 			name: "invalid parent",
@@ -77,11 +76,11 @@ func TestParseName(t *testing.T) {
 		},
 		{
 			name: "invalid name",
-			in:   "a/results/b/c",
+			in:   "clusters/a/namespaces/b/results/c/d",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			parent, name, err := ParseName(tc.in)
+			cluster, namespace, name, err := ParseName(tc.in)
 			if err != nil {
 				if tc.want == nil {
 					// error was expected, continue
@@ -90,11 +89,123 @@ func TestParseName(t *testing.T) {
 				t.Fatal(err)
 			}
 			if tc.want == nil {
-				t.Fatalf("expected error, got: [%s, %s]", parent, name)
+				t.Fatalf("expected error, got: [%s, %s, %s]", cluster, namespace, name)
 			}
 
-			if parent != tc.want[0] || name != tc.want[1] {
-				t.Errorf("want: %v, got: [%s, %s]", tc.want, parent, name)
+			if cluster != tc.want[0] || namespace != tc.want[1] || name != tc.want[2] {
+				t.Errorf("want: %v, got: [%s, %s, %s]", tc.want, cluster, namespace, name)
+			}
+		})
+	}
+}
+
+func TestParseParent(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		// if want is nil, assume error
+		want []string
+	}{
+		{
+			name: "simple",
+			in:   "clusters/a/namespaces/b",
+			want: []string{"a", "b"},
+		},
+		{
+			name: "resource name reuse",
+			in:   "clusters/clusters/namespaces/namespaces",
+			want: []string{"clusters", "namespaces"},
+		},
+		{
+			name: "missing namespace",
+			in:   "clusters/a/namespaces/",
+		},
+		{
+			name: "missing name, no slash",
+			in:   "clusters/a/namespaces",
+		},
+		{
+			name: "invalid namespace",
+			in:   "clusters/a/namespaces/b/c",
+		},
+		{
+			name: "missing cluster",
+			in:   "clusters//namespaces/b",
+		},
+		{
+			name: "missing cluster, no slash",
+			in:   "clusters/namespaces/b",
+		},
+		{
+			name: "invalid cluster",
+			in:   "clusters/a/b/namespaces/c",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cluster, namespace, err := ParseParent(tc.in)
+			if err != nil {
+				if tc.want == nil {
+					// error was expected, continue
+					return
+				}
+				t.Fatal(err)
+			}
+			if tc.want == nil {
+				t.Fatalf("expected error, got: [%s, %s]", cluster, namespace)
+			}
+			if cluster != tc.want[0] || namespace != tc.want[1] {
+				t.Errorf("want: %v, got: [%s, %s]", tc.want, cluster, namespace)
+			}
+		})
+	}
+}
+func TestParseParentDB(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		// if want is nil, assume error
+		want []string
+	}{
+		{
+			name: "simple",
+			in:   "a/b",
+			want: []string{"a", "b"},
+		},
+		{
+			name: "missing cluster",
+			in:   "/a",
+		},
+		{
+			name: "missing namespace",
+			in:   "a/",
+		},
+		{
+			name: "missing namespace, no slash",
+			in:   "a",
+		},
+		{
+			name: "less parameters",
+			in:   "abc",
+		},
+		{
+			name: "more parameters",
+			in:   "a/b/c",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cluster, namespace, err := ParseParentDB(tc.in)
+			if err != nil {
+				if tc.want == nil {
+					// error was expected, continue
+					return
+				}
+				t.Fatal(err)
+			}
+			if tc.want == nil {
+				t.Fatalf("expected error, got: [%s, %s]", cluster, namespace)
+			}
+			if cluster != tc.want[0] || namespace != tc.want[1] {
+				t.Errorf("want: %v, got: [%s, %s]", tc.want, cluster, namespace)
 			}
 		})
 	}
@@ -109,15 +220,15 @@ func TestToStorage(t *testing.T) {
 		{
 			name: "all",
 			in: &pb.Result{
-				Name:        "foo/results/bar",
-				Id:          "a",
+				Name:        "clusters/a/namespaces/b/results/c",
+				Id:          "1",
 				CreatedTime: timestamppb.New(clock.Now()),
 				UpdatedTime: timestamppb.New(clock.Now()),
 				Annotations: map[string]string{"a": "b"},
 				Etag:        "tacocat",
 				Summary: &pb.RecordSummary{
-					Record:      "foo/results/bar/records/baz",
-					Type:        "bar",
+					Record:      "clusters/a/namespaces/b/results/c/records/d",
+					Type:        "type",
 					StartTime:   timestamppb.New(clock.Now()),
 					EndTime:     timestamppb.New(clock.Now()),
 					Status:      pb.RecordSummary_SUCCESS,
@@ -125,16 +236,16 @@ func TestToStorage(t *testing.T) {
 				},
 			},
 			want: &db.Result{
-				Parent:      "foo",
-				Name:        "bar",
-				ID:          "a",
+				Parent:      "a/b",
+				Name:        "c",
+				ID:          "1",
 				Annotations: map[string]string{"a": "b"},
 				CreatedTime: clock.Now(),
 				UpdatedTime: clock.Now(),
 				Etag:        "tacocat",
 				Summary: db.RecordSummary{
-					Record:      "foo/results/bar/records/baz",
-					Type:        "bar",
+					Record:      "clusters/a/namespaces/b/results/c/records/d",
+					Type:        "type",
 					StartTime:   ptr.Time(clock.Now()),
 					EndTime:     ptr.Time(clock.Now()),
 					Status:      1,
@@ -145,9 +256,9 @@ func TestToStorage(t *testing.T) {
 		{
 			name: "deprecated fields",
 			in: &pb.Result{
-				Name:        "foo/results/bar",
-				Uid:         "a",
-				Id:          "b",
+				Name:        "clusters/a/namespaces/b/results/c",
+				Uid:         "1",
+				Id:          "2",
 				CreatedTime: timestamppb.New(clock.Now().Add(time.Minute)),
 				CreateTime:  timestamppb.New(clock.Now()),
 				UpdatedTime: timestamppb.New(clock.Now().Add(time.Minute)),
@@ -156,9 +267,9 @@ func TestToStorage(t *testing.T) {
 				Etag:        "tacocat",
 			},
 			want: &db.Result{
-				Parent:      "foo",
-				Name:        "bar",
-				ID:          "a",
+				Parent:      "a/b",
+				Name:        "c",
+				ID:          "1",
 				Annotations: map[string]string{"a": "b"},
 				CreatedTime: clock.Now(),
 				UpdatedTime: clock.Now(),
@@ -186,10 +297,10 @@ func TestToStorage(t *testing.T) {
 		{
 			name: "invalid summary record name",
 			in: &pb.Result{
-				Name: "foo/results/bar",
-				Id:   "a",
+				Name: "clusters/a/namespaces/b/results/c",
+				Id:   "1",
 				Summary: &pb.RecordSummary{
-					Record: "foo",
+					Record: "d",
 				},
 			},
 			want: codes.InvalidArgument,
@@ -197,10 +308,10 @@ func TestToStorage(t *testing.T) {
 		{
 			name: "invalid summary type",
 			in: &pb.Result{
-				Name: "foo/results/bar",
-				Id:   "a",
+				Name: "clusters/a/namespaces/b/results/c",
+				Id:   "1",
 				Summary: &pb.RecordSummary{
-					Record: "foo/results/bar/records/baz",
+					Record: "clusters/a/namespaces/b/results/c/records/d",
 					Type:   strings.Repeat("a", 1024),
 				},
 			},
@@ -218,25 +329,28 @@ func TestToStorage(t *testing.T) {
 
 func TestToAPI(t *testing.T) {
 	ann := map[string]string{"a": "b"}
-	got := ToAPI(&db.Result{
-		Parent:      "foo",
-		Name:        "bar",
-		ID:          "a",
+	got, err := ToAPI(&db.Result{
+		Parent:      "a/b",
+		Name:        "c",
+		ID:          "1",
 		CreatedTime: clock.Now(),
 		UpdatedTime: clock.Now(),
 		Annotations: ann,
 		Etag:        "etag",
 	})
 	want := &pb.Result{
-		Name:        "foo/results/bar",
-		Id:          "a",
-		Uid:         "a",
+		Name:        "clusters/a/namespaces/b/results/c",
+		Id:          "1",
+		Uid:         "1",
 		CreatedTime: timestamppb.New(clock.Now()),
 		CreateTime:  timestamppb.New(clock.Now()),
 		UpdatedTime: timestamppb.New(clock.Now()),
 		UpdateTime:  timestamppb.New(clock.Now()),
 		Annotations: ann,
 		Etag:        "etag",
+	}
+	if err != nil {
+		t.Fatal(err)
 	}
 	if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
 		t.Errorf("-want,+got: %s", diff)
@@ -252,7 +366,7 @@ func TestMatch(t *testing.T) {
 	r := &pb.Result{
 		Name:        "foo",
 		Id:          "bar",
-		CreatedTime: timestamppb.Now(),
+		CreateTime:  timestamppb.Now(),
 		Annotations: map[string]string{"a": "b"},
 		Etag:        "tacocat",
 	}
@@ -319,6 +433,22 @@ func TestMatch(t *testing.T) {
 func TestFormatName(t *testing.T) {
 	got := FormatName("a", "b")
 	want := "a/results/b"
+	if want != got {
+		t.Errorf("want %s, got %s", want, got)
+	}
+}
+
+func TestFormatParent(t *testing.T) {
+	got := FormatParent("a", "b")
+	want := "clusters/a/namespaces/b"
+	if want != got {
+		t.Errorf("want %s, got %s", want, got)
+	}
+}
+
+func TestFormatParentDB(t *testing.T) {
+	got := FormatParentDB("a", "b")
+	want := "a/b"
 	if want != got {
 		t.Errorf("want %s, got %s", want, got)
 	}

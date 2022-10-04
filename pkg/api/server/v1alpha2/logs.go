@@ -19,16 +19,20 @@ import (
 
 func (s *Server) GetLog(req *pb.GetLogRequest, srv pb.Results_GetLogServer) error {
 	// Step 1: Get the record by its name
-	parent, result, name, err := record.ParseName(req.GetName())
+	cluster, namespace, result, name, err := record.ParseName(req.GetName())
 	if err != nil {
 		fmt.Printf("GetLog: could not parse record name %s: %v\n", req.GetName(), err)
 		return err
 	}
 	// Step 2: Run SAR check
-	if err := s.auth.Check(srv.Context(), parent, auth.ResourceRecords, auth.PermissionGet); err != nil {
+	if err := s.auth.Check(srv.Context(), cluster, namespace, auth.ResourceRecords, auth.PermissionGet); err != nil {
 		fmt.Printf("GetLog: SAR check failed for %s: %v\n", req.GetName(), err)
 		return err
 	}
+
+	// Format parent name
+	parent := record.FormatParentDB(cluster, namespace)
+
 	// Step 3: Get record from database
 	dbRecord, err := getRecord(s.db.WithContext(srv.Context()), parent, result, name)
 	if err != nil {
@@ -107,16 +111,20 @@ func (s *Server) UpdateLog(stream pb.Results_UpdateLogServer) error {
 		}
 
 		// Step 1: Get the record by its name
-		parent, result, name, err := record.ParseName(recordName)
+		cluster, namespace, result, name, err := record.ParseName(recordName)
 		if err != nil {
 			fmt.Printf("PutLog: error parsing record name %s: %v\n", recordName, err)
 			return s.handleReturn(stream, dbRecord, taskRunLog, bytesWritten, err)
 		}
 		// Step 2: Run SAR check
-		if err := s.auth.Check(stream.Context(), parent, auth.ResourceRecords, auth.PermissionUpdate); err != nil {
+		if err := s.auth.Check(stream.Context(), cluster, namespace, auth.ResourceRecords, auth.PermissionUpdate); err != nil {
 			fmt.Printf("PutLog: SAR check for %s failed: %v\n", recordName, err)
 			return s.handleReturn(stream, dbRecord, taskRunLog, bytesWritten, err)
 		}
+
+		// Format parent name
+		parent := record.FormatParentDB(cluster, namespace)
+
 		// Step 3: Get record from database
 		if dbRecord == nil {
 			dbRecord, err = getRecord(s.db.WithContext(stream.Context()), parent, result, name)

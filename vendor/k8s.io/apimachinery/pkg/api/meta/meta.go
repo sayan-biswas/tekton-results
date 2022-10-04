@@ -130,7 +130,7 @@ func AsPartialObjectMetadata(m metav1.Object) *metav1.PartialObjectMetadata {
 				Annotations:                m.GetAnnotations(),
 				OwnerReferences:            m.GetOwnerReferences(),
 				Finalizers:                 m.GetFinalizers(),
-				ClusterName:                m.GetClusterName(),
+				ZZZ_DeprecatedClusterName:  m.GetZZZ_DeprecatedClusterName(),
 				ManagedFields:              m.GetManagedFields(),
 			},
 		}
@@ -372,6 +372,23 @@ func (resourceAccessor) SetContinue(obj runtime.Object, version string) error {
 		return err
 	}
 	accessor.SetContinue(version)
+	return nil
+}
+
+func (resourceAccessor) ZZZ_DeprecatedClusterName(obj runtime.Object) (string, error) {
+	accessor, err := Accessor(obj)
+	if err != nil {
+		return "", err
+	}
+	return accessor.GetZZZ_DeprecatedClusterName(), nil
+}
+
+func (resourceAccessor) SetZZZ_DeprecatedClusterName(obj runtime.Object, clusterName string) error {
+	accessor, err := Accessor(obj)
+	if err != nil {
+		return err
+	}
+	accessor.SetZZZ_DeprecatedClusterName(clusterName)
 	return nil
 }
 

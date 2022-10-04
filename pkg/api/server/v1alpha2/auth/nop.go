@@ -20,6 +20,6 @@ import "context"
 // params. Useful for testing or cases where you want to disable auth checks.
 type AllowAll struct{}
 
-func (AllowAll) Check(context.Context, string, string, string) error {
+func (AllowAll) Check(context.Context, string, string, string, string) error {
 	return nil
 }

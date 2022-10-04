@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	gopath "path"
 	"sort"
 	"strings"
 	"sync"
@@ -29,7 +30,9 @@ import (
 
 	//nolint:staticcheck // SA1019 Keep using module since it's still being maintained and the api of google.golang.org/protobuf/proto differs
 	"github.com/golang/protobuf/proto"
-	openapi_v2 "github.com/googleapis/gnostic/openapiv2"
+	openapi_v2 "github.com/google/gnostic/openapiv2"
+
+	"github.com/kcp-dev/logicalcluster/v2"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,6 +42,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/openapi"
 	restclient "k8s.io/client-go/rest"
 )
 
@@ -46,7 +50,8 @@ const (
 	// defaultRetries is the number of times a resource discovery is repeated if an api group disappears on the fly (e.g. CustomResourceDefinitions).
 	defaultRetries = 2
 	// protobuf mime type
-	mimePb = "application/com.github.proto-openapi.spec.v2@v1.0+protobuf"
+	openAPIV2mimePb = "application/com.github.proto-openapi.spec.v2@v1.0+protobuf"
+
 	// defaultTimeout is the maximum amount of time per request when no timeout has been set on a RESTClient.
 	// Defaults to 32s in order to have a distinguishable length of time, relative to other timeouts that exist.
 	defaultTimeout = 32 * time.Second
@@ -60,6 +65,7 @@ type DiscoveryInterface interface {
 	ServerResourcesInterface
 	ServerVersionInterface
 	OpenAPISchemaInterface
+	OpenAPIV3SchemaInterface
 }
 
 // CachedDiscoveryInterface is a DiscoveryInterface with cache invalidation and freshness.
@@ -90,13 +96,6 @@ type ServerGroupsInterface interface {
 type ServerResourcesInterface interface {
 	// ServerResourcesForGroupVersion returns the supported resources for a group and version.
 	ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error)
-	// ServerResources returns the supported resources for all groups and versions.
-	//
-	// The returned resource list might be non-nil with partial results even in the case of
-	// non-nil error.
-	//
-	// Deprecated: use ServerGroupsAndResources instead.
-	ServerResources() ([]*metav1.APIResourceList, error)
 	// ServerGroupsAndResources returns the supported groups and resources for all groups and versions.
 	//
 	// The returned group and resource lists might be non-nil with partial results even in the
@@ -128,9 +127,25 @@ type OpenAPISchemaInterface interface {
 	OpenAPISchema() (*openapi_v2.Document, error)
 }
 
+type OpenAPIV3SchemaInterface interface {
+	OpenAPIV3() openapi.Client
+}
+
 // DiscoveryClient implements the functions that discover server-supported API groups,
 // versions and resources.
 type DiscoveryClient struct {
+	*scopedClient
+	cluster logicalcluster.Name
+}
+
+func (d *DiscoveryClient) WithCluster(cluster logicalcluster.Name) DiscoveryInterface {
+	return &DiscoveryClient{
+		scopedClient: d.scopedClient,
+		cluster:      cluster,
+	}
+}
+
+type scopedClient struct {
 	restClient restclient.Interface
 
 	LegacyPrefix string
@@ -158,7 +173,7 @@ func apiVersionsToAPIGroup(apiVersions *metav1.APIVersions) (apiGroup metav1.API
 func (d *DiscoveryClient) ServerGroups() (apiGroupList *metav1.APIGroupList, err error) {
 	// Get the groupVersions exposed at /api
 	v := &metav1.APIVersions{}
-	err = d.restClient.Get().AbsPath(d.LegacyPrefix).Do(context.TODO()).Into(v)
+	err = d.restClient.Get().AbsPath(d.clusterAwarePath(d.LegacyPrefix)).Do(context.TODO()).Into(v)
 	apiGroup := metav1.APIGroup{}
 	if err == nil && len(v.Versions) != 0 {
 		apiGroup = apiVersionsToAPIGroup(v)
@@ -169,7 +184,7 @@ func (d *DiscoveryClient) ServerGroups() (apiGroupList *metav1.APIGroupList, err
 
 	// Get the groupVersions exposed at /apis
 	apiGroupList = &metav1.APIGroupList{}
-	err = d.restClient.Get().AbsPath("/apis").Do(context.TODO()).Into(apiGroupList)
+	err = d.restClient.Get().AbsPath(d.clusterAwarePath("/apis")).Do(context.TODO()).Into(apiGroupList)
 	if err != nil && !errors.IsNotFound(err) && !errors.IsForbidden(err) {
 		return nil, err
 	}
@@ -199,7 +214,7 @@ func (d *DiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (r
 	resources = &metav1.APIResourceList{
 		GroupVersion: groupVersion,
 	}
-	err = d.restClient.Get().AbsPath(url.String()).Do(context.TODO()).Into(resources)
+	err = d.restClient.Get().AbsPath(d.clusterAwarePath(url.String())).Do(context.TODO()).Into(resources)
 	if err != nil {
 		// ignore 403 or 404 error to be compatible with an v1.0 server.
 		if groupVersion == "v1" && (errors.IsNotFound(err) || errors.IsForbidden(err)) {
@@ -208,13 +223,6 @@ func (d *DiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (r
 		return nil, err
 	}
 	return resources, nil
-}
-
-// ServerResources returns the supported resources for all groups and versions.
-// Deprecated: use ServerGroupsAndResources instead.
-func (d *DiscoveryClient) ServerResources() ([]*metav1.APIResourceList, error) {
-	_, rs, err := d.ServerGroupsAndResources()
-	return rs, err
 }
 
 // ServerGroupsAndResources returns the supported resources for all groups and versions.
@@ -245,13 +253,6 @@ func (e *ErrGroupDiscoveryFailed) Error() string {
 func IsGroupDiscoveryFailedError(err error) bool {
 	_, ok := err.(*ErrGroupDiscoveryFailed)
 	return err != nil && ok
-}
-
-// ServerResources uses the provided discovery interface to look up supported resources for all groups and versions.
-// Deprecated: use ServerGroupsAndResources instead.
-func ServerResources(d DiscoveryInterface) ([]*metav1.APIResourceList, error) {
-	_, rs, err := ServerGroupsAndResources(d)
-	return rs, err
 }
 
 func ServerGroupsAndResources(d DiscoveryInterface) ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
@@ -406,9 +407,16 @@ func ServerPreferredNamespacedResources(d DiscoveryInterface) ([]*metav1.APIReso
 	}), all), err
 }
 
+func (d *DiscoveryClient) clusterAwarePath(path string) string {
+	if d.cluster.Empty() {
+		return path
+	}
+	return gopath.Join(d.cluster.Path(), path)
+}
+
 // ServerVersion retrieves and parses the server's version (git version).
 func (d *DiscoveryClient) ServerVersion() (*version.Info, error) {
-	body, err := d.restClient.Get().AbsPath("/version").Do(context.TODO()).Raw()
+	body, err := d.restClient.Get().AbsPath(d.clusterAwarePath("/version")).Do(context.TODO()).Raw()
 	if err != nil {
 		return nil, err
 	}
@@ -420,14 +428,14 @@ func (d *DiscoveryClient) ServerVersion() (*version.Info, error) {
 	return &info, nil
 }
 
-// OpenAPISchema fetches the open api schema using a rest client and parses the proto.
+// OpenAPISchema fetches the open api v2 schema using a rest client and parses the proto.
 func (d *DiscoveryClient) OpenAPISchema() (*openapi_v2.Document, error) {
-	data, err := d.restClient.Get().AbsPath("/openapi/v2").SetHeader("Accept", mimePb).Do(context.TODO()).Raw()
+	data, err := d.restClient.Get().AbsPath(d.clusterAwarePath("/openapi/v2")).SetHeader("Accept", openAPIV2mimePb).Do(context.TODO()).Raw()
 	if err != nil {
 		if errors.IsForbidden(err) || errors.IsNotFound(err) || errors.IsNotAcceptable(err) {
 			// single endpoint not found/registered in old server, try to fetch old endpoint
 			// TODO: remove this when kubectl/client-go don't work with 1.9 server
-			data, err = d.restClient.Get().AbsPath("/swagger-2.0.0.pb-v1").Do(context.TODO()).Raw()
+			data, err = d.restClient.Get().AbsPath(d.clusterAwarePath("/swagger-2.0.0.pb-v1")).Do(context.TODO()).Raw()
 			if err != nil {
 				return nil, err
 			}
@@ -441,6 +449,10 @@ func (d *DiscoveryClient) OpenAPISchema() (*openapi_v2.Document, error) {
 		return nil, err
 	}
 	return document, nil
+}
+
+func (d *DiscoveryClient) OpenAPIV3() openapi.Client {
+	return openapi.NewClient(d.restClient)
 }
 
 // withRetries retries the given recovery function in case the groups supported by the server change after ServerGroup() returns.
@@ -506,7 +518,7 @@ func NewDiscoveryClientForConfigAndClient(c *restclient.Config, httpClient *http
 		return nil, err
 	}
 	client, err := restclient.UnversionedRESTClientForConfigAndClient(&config, httpClient)
-	return &DiscoveryClient{restClient: client, LegacyPrefix: "/api"}, err
+	return &DiscoveryClient{scopedClient: &scopedClient{restClient: client, LegacyPrefix: "/api"}}, err
 }
 
 // NewDiscoveryClientForConfigOrDie creates a new DiscoveryClient for the given config. If
@@ -522,7 +534,7 @@ func NewDiscoveryClientForConfigOrDie(c *restclient.Config) *DiscoveryClient {
 
 // NewDiscoveryClient returns a new DiscoveryClient for the given RESTClient.
 func NewDiscoveryClient(c restclient.Interface) *DiscoveryClient {
-	return &DiscoveryClient{restClient: c, LegacyPrefix: "/api"}
+	return &DiscoveryClient{scopedClient: &scopedClient{restClient: c, LegacyPrefix: "/api"}}
 }
 
 // RESTClient returns a RESTClient that is used to communicate

@@ -28,80 +28,91 @@ import "google/protobuf/field_mask.proto";
 option go_package = "github.com/tektoncd/results/proto/v1alpha2/results_go_proto";
 
 service Results {
+
   rpc CreateResult(CreateResultRequest) returns (Result) {
     option (google.api.http) = {
-      post: "/v1alpha2/{parent=*}/results"
+      post: "/v1alpha2/{parent=clusters/*/namespaces/*}/results"
       body: "result"
     };
+    option (google.api.method_signature) = "parent,result";
   }
 
   rpc UpdateResult(UpdateResultRequest) returns (Result) {
     option (google.api.http) = {
-      patch: "/v1alpha2/{result.name=*/results/*}"
+      patch: "/v1alpha2/{result.name=clusters/*/namespaces/*/results/*}"
       body: "result"
     };
+    option (google.api.method_signature) = "result,update_mask";
   }
 
   rpc GetResult(GetResultRequest) returns (Result) {
     option (google.api.http) = {
-      get: "/v1alpha2/{name=*/results/*}"
+      get: "/v1alpha2/{name=clusters/*/namespaces/*/results/*}"
     };
+    option (google.api.method_signature) = "name";
   }
 
   rpc DeleteResult(DeleteResultRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
-      delete: "/v1alpha2/{name=*/results/*}"
+      delete: "/v1alpha2/{name=clusters/*/namespaces/*/results/*}"
     };
+    option (google.api.method_signature) = "name";
   }
 
   rpc ListResults(ListResultsRequest) returns (ListResultsResponse) {
     option (google.api.http) = {
-      get: "/v1alpha2/{parent=*}/results"
+      get: "/v1alpha2/{parent=clusters/*/namespaces/*}/results"
     };
+    option (google.api.method_signature) = "parent";
   }
 
   rpc CreateRecord(CreateRecordRequest) returns (Record) {
     option (google.api.http) = {
-    post: "/v1alpha2/{parent=*/results/*}/records"
+      post: "/v1alpha2/{parent=clusters/*/namespaces/*/results/*}/records"
       body: "record"
     };
+    option (google.api.method_signature) = "parent,record";
   }
 
   rpc UpdateRecord(UpdateRecordRequest) returns (Record) {
     option (google.api.http) = {
-    patch: "/v1alpha2/{record.name=*/results/*/records/*}"
+      patch: "/v1alpha2/{record.name=clusters/*/namespaces/*/results/*/records/*}"
       body: "record"
     };
+    option (google.api.method_signature) = "record,update_mask";
   }
 
   rpc GetRecord(GetRecordRequest) returns (Record) {
     option (google.api.http) = {
-      get: "/v1alpha2/{name=*/results/*/records/*}"
+      get: "/v1alpha2/{name=clusters/*/namespaces/*/results/*/records/*}"
     };
+    option (google.api.method_signature) = "name";
   }
 
   rpc ListRecords(ListRecordsRequest) returns (ListRecordsResponse) {
     option (google.api.http) = {
-      get: "/v1alpha2/{parent=*/results/*}/records"
+      get: "/v1alpha2/{parent=clusters/*/namespaces/*/results/*}/records"
     };
+    option (google.api.method_signature) = "parent";
   }
 
   rpc DeleteRecord(DeleteRecordRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
-      delete: "/v1alpha2/{name=*/results/*/records/*}"
+      delete: "/v1alpha2/{name=clusters/*/namespaces/*/results/*/records/*}"
     };
+    option (google.api.method_signature) = "name";
   }
 
   rpc GetLog(GetLogRequest) returns (stream Log) {
     option (google.api.http) = {
-      get: "/v1alpha2/{name=*/results/*/logs/*}"
+      get: "/v1alpha2/{name=clusters/*/namespaces/*/results/*/logs/*}"
     };
     option (google.api.method_signature) = "name";
   }
 
   rpc ListLogs(ListLogsRequest) returns (ListLogsResponse) {
     option (google.api.http) = {
-      get: "/v1alpha2/{parent=*/results/*}/logs"
+      get: "/v1alpha2/{parent=clusters/*/namespaces/*/results/*}/logs"
     };
     option (google.api.method_signature) = "parent";
   }
@@ -112,7 +123,7 @@ service Results {
 
   rpc DeleteLog(DeleteLogRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
-      delete: "/v1alpha2/{name=*/results/*/logs/*}"
+      delete: "/v1alpha2/{name=clusters/*/namespaces/*/results/*/logs/*}"
     };
     option (google.api.method_signature) = "name";
   }
@@ -120,38 +131,52 @@ service Results {
 }
 
 message CreateResultRequest {
-  // User provided parent to partition results under.
-  string parent = 1;
-
+  // Format: clusters/{workspace}/namespaces/{namespace}
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Result"
+    }];
   Result result = 2 [(google.api.field_behavior) = REQUIRED];
 }
 
 message DeleteResultRequest {
-  string name = 1;
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Result"
+    }];
 }
 
 message UpdateResultRequest {
-  string name = 1;
-  Result result = 2;
-  
-  // If set, then the request will succeed if and only if the provided etag
-  // matches the server-computed value, else will fail.
-  // Should be used to prevent concurrent updates from overwritting each other.
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}
+  Result result = 1 [(google.api.field_behavior) = REQUIRED];
+
+  google.protobuf.FieldMask update_mask = 2;
   string etag = 3;
 }
 
 message GetResultRequest {
-  string name = 1;
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Result"
+    }];
 }
 
 message ListResultsRequest {
-  string parent = 1;
-
+  // Format: clusters/{workspace}/namespaces/{namespace}
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      child_type: "tekton.results.v1alpha2/Result"
+    }];
   string filter = 2;
-
-  int32 page_size = 3;
-  string page_token = 4;
-  string order_by = 5;
+  string order_by = 3;
+  int32 page_size = 4;
+  string page_token = 5;
 }
 
 message ListResultsResponse {
@@ -160,41 +185,52 @@ message ListResultsResponse {
 }
 
 message CreateRecordRequest {
-  // User provided parent to partition results under.
-  string parent = 1 [(google.api.resource_reference) = {
-    type: "tekton.results.v1alpha2/Result"
-    child_type: "tekton.results.v1alpha2/Record"
-  }];
-
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Result"
+      child_type: "tekton.results.v1alpha2/Record"
+    }];
   Record record = 2 [(google.api.field_behavior) = REQUIRED];
 }
 
 message DeleteRecordRequest {
-  string name = 1;
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}/records/{record}
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Record"
+    }];
 }
 
 message UpdateRecordRequest {
-  Record record = 1;
-
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}/records/{record}
+  Record record = 1 [(google.api.field_behavior) = REQUIRED];
   google.protobuf.FieldMask update_mask = 2;
-  // If set, then the request will succeed if and only if the provided etag
-  // matches the server-computed value, else will fail.
-  // Should be used to prevent concurrent updates from overwritting each other.
   string etag = 3;
 }
 
 message GetRecordRequest {
-  string name = 1;
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}/records/{record}
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Record"
+    }];
 }
 
 message ListRecordsRequest {
-  string parent = 1;
-
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "tekton.results.v1alpha2/Result"
+      child_type: "tekton.results.v1alpha2/Record"
+    }];
   string filter = 2;
-
-  int32 page_size = 3;
-  string page_token = 4;
-  string order_by = 5;
+  string order_by = 3;
+  int32 page_size = 4;
+  string page_token = 5;
 }
 
 message ListRecordsResponse {
@@ -203,8 +239,7 @@ message ListRecordsResponse {
 }
 
 message GetLogRequest {
-  // Name of the log to retrieve.
-  // Format: {namespace}/results/{result}/logs/{record}
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}/logs/{record}
   string name = 1 [
     (google.api.field_behavior) = REQUIRED,
     (google.api.resource_reference) = {
@@ -213,39 +248,30 @@ message GetLogRequest {
 }
 
 message ListLogsRequest {
-  // The parent, which owns this collection of logs.
-  // Format: {namespace}/results/{result}
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}
   string parent = 1 [
     (google.api.field_behavior) = REQUIRED,
     (google.api.resource_reference) = {
       type: "tekton.results.v1alpha2/Result"
       child_type: "tekton.results.v1alpha2/Record"
     }];
-
   int32 page_size = 2;
-
   string page_token = 3;
-
   string filter = 4;
-
   string order_by = 5;
 }
 
 message ListLogsResponse {
-  // The collection of logs
   repeated LogSummary logs = 1;
-
-  // A token, which can be sent as `page_token` to retrieve the next page.
-  // If this field is omitted, there are no subsequent pages.
   string next_page_token = 2;
 }
 
 message DeleteLogRequest {
-  // Name of the log to delete.
-  // Format: {namespace}/results/{result}/logs/{record}
+  // Format: clusters/{workspace}/namespaces/{namespace}/results/{result}/logs/{record}
   string name = 1 [
     (google.api.field_behavior) = REQUIRED,
     (google.api.resource_reference) = {
       type: "tekton.results.v1alpha2/Record"
     }];
 }
+

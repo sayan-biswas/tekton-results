@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"github.com/tektoncd/results/pkg/api/server/v1alpha2/result"
 	"io"
 	"io/ioutil"
 	"os"
@@ -75,10 +76,10 @@ func TestGetLog(t *testing.T) {
 	mock := &mockGetLogServer{
 		ctx: ctx,
 	}
-	result, err := srv.CreateResult(ctx, &pb.CreateResultRequest{
-		Parent: "foo",
+	res, err := srv.CreateResult(ctx, &pb.CreateResultRequest{
+		Parent: result.FormatParent("a", "b"),
 		Result: &pb.Result{
-			Name: "foo/results/bar",
+			Name: result.FormatName(result.FormatParent("a", "b"), "c"),
 		},
 	})
 	if err != nil {
@@ -101,16 +102,16 @@ func TestGetLog(t *testing.T) {
 	}
 
 	record, err := srv.CreateRecord(ctx, &pb.CreateRecordRequest{
-		Parent: result.GetName(),
+		Parent: res.GetName(),
 		Record: &pb.Record{
-			Name: recordutil.FormatName(result.GetName(), "baz-log"),
+			Name: recordutil.FormatName(res.GetName(), "c-log"),
 			Data: &pb.Any{
 				Type: v1alpha2.TaskRunLogRecordType,
 				Value: jsonutil.AnyBytes(t, &v1alpha2.TaskRunLog{
 					Spec: v1alpha2.TaskRunLogSpec{
 						Ref: v1alpha2.TaskRunRef{
-							Namespace: "foo",
-							Name:      "baz",
+							Namespace: "b",
+							Name:      "c",
 						},
 						Type: v1alpha2.FileLogType,
 					},
@@ -147,10 +148,10 @@ func TestPutLog(t *testing.T) {
 		t.Fatalf("failed to create server: %v", err)
 	}
 	ctx := context.Background()
-	result, err := srv.CreateResult(ctx, &pb.CreateResultRequest{
-		Parent: "foo",
+	res, err := srv.CreateResult(ctx, &pb.CreateResultRequest{
+		Parent: result.FormatParent("a", "b"),
 		Result: &pb.Result{
-			Name: "foo/results/bar",
+			Name: result.FormatName(result.FormatParent("a", "b"), "c"),
 		},
 	})
 	if err != nil {
@@ -165,10 +166,10 @@ func TestPutLog(t *testing.T) {
 	t.Cleanup(func() {
 		os.RemoveAll(testDir)
 	})
-	recordName := recordutil.FormatName(result.GetName(), "baz-log")
+	recordName := recordutil.FormatName(res.GetName(), "c-log")
 	path := filepath.Join(testDir, recordName, "task-run.log")
 	record, err := srv.CreateRecord(ctx, &pb.CreateRecordRequest{
-		Parent: result.GetName(),
+		Parent: res.GetName(),
 		Record: &pb.Record{
 			Name: recordName,
 			Data: &pb.Any{
@@ -176,8 +177,8 @@ func TestPutLog(t *testing.T) {
 				Value: jsonutil.AnyBytes(t, &v1alpha2.TaskRunLog{
 					Spec: v1alpha2.TaskRunLogSpec{
 						Ref: v1alpha2.TaskRunRef{
-							Namespace: "foo",
-							Name:      "baz",
+							Namespace: "b",
+							Name:      "c",
 						},
 						Type: v1alpha2.FileLogType,
 					},

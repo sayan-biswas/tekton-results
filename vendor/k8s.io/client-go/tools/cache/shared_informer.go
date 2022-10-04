@@ -17,6 +17,7 @@ limitations under the License.
 package cache
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -180,6 +181,20 @@ type SharedInformer interface {
 	// The handler should return quickly - any expensive processing should be
 	// offloaded.
 	SetWatchErrorHandler(handler WatchErrorHandler) error
+
+	// The TransformFunc is called for each object which is about to be stored.
+	//
+	// This function is intended for you to take the opportunity to
+	// remove, transform, or normalize fields. One use case is to strip unused
+	// metadata fields out of objects to save on RAM cost.
+	//
+	// Must be set before starting the informer.
+	//
+	// Note: Since the object given to the handler may be already shared with
+	//	other goroutines, it is advisable to copy the object being
+	//  transform before mutating it at all and returning the copy to prevent
+	//	data races.
+	SetTransform(handler TransformFunc) error
 }
 
 // SharedIndexInformer provides add and get Indexers ability based on SharedInformer.
@@ -190,12 +205,24 @@ type SharedIndexInformer interface {
 	GetIndexer() Indexer
 }
 
-// NewSharedInformer creates a new instance for the listwatcher.
+// NewSharedInformer delegates to NewSharedIndexInformerWithOptions to
+// create a new instance for the listwatcher.
 func NewSharedInformer(lw ListerWatcher, exampleObject runtime.Object, defaultEventHandlerResyncPeriod time.Duration) SharedInformer {
-	return NewSharedIndexInformer(lw, exampleObject, defaultEventHandlerResyncPeriod, Indexers{})
+	return NewSharedIndexInformerWithOptions(lw, exampleObject, WithResyncPeriod(defaultEventHandlerResyncPeriod))
 }
 
-// NewSharedIndexInformer creates a new instance for the listwatcher.
+// NewSharedIndexInformer delegates to NewSharedIndexInformerWithOptions
+// to create a new instance for the listwatcher.
+func NewSharedIndexInformer(lw ListerWatcher, exampleObject runtime.Object, defaultEventHandlerResyncPeriod time.Duration, indexers Indexers) SharedIndexInformer {
+	return NewSharedIndexInformerWithOptions(
+		lw,
+		exampleObject,
+		WithResyncPeriod(defaultEventHandlerResyncPeriod),
+		WithIndexers(indexers),
+	)
+}
+
+// NewSharedIndexInformerWithOptions creates a new instance for the listwatcher.
 // The created informer will not do resyncs if the given
 // defaultEventHandlerResyncPeriod is zero.  Otherwise: for each
 // handler that with a non-zero requested resync period, whether added
@@ -207,19 +234,54 @@ func NewSharedInformer(lw ListerWatcher, exampleObject runtime.Object, defaultEv
 // requested before the informer starts and the
 // defaultEventHandlerResyncPeriod given here and (b) the constant
 // `minimumResyncPeriod` defined in this file.
-func NewSharedIndexInformer(lw ListerWatcher, exampleObject runtime.Object, defaultEventHandlerResyncPeriod time.Duration, indexers Indexers) SharedIndexInformer {
+func NewSharedIndexInformerWithOptions(lw ListerWatcher, exampleObject runtime.Object, opts ...SharedInformerOption) SharedIndexInformer {
 	realClock := &clock.RealClock{}
 	sharedIndexInformer := &sharedIndexInformer{
-		processor:                       &sharedProcessor{clock: realClock},
-		indexer:                         NewIndexer(DeletionHandlingMetaNamespaceKeyFunc, indexers),
-		listerWatcher:                   lw,
-		objectType:                      exampleObject,
-		resyncCheckPeriod:               defaultEventHandlerResyncPeriod,
-		defaultEventHandlerResyncPeriod: defaultEventHandlerResyncPeriod,
-		cacheMutationDetector:           NewCacheMutationDetector(fmt.Sprintf("%T", exampleObject)),
-		clock:                           realClock,
+		processor:             &sharedProcessor{clock: realClock},
+		listerWatcher:         lw,
+		objectType:            exampleObject,
+		cacheMutationDetector: NewCacheMutationDetector(fmt.Sprintf("%T", exampleObject)),
+		clock:                 realClock,
 	}
+
+	for _, opt := range opts {
+		opt(sharedIndexInformer)
+	}
+
+	if sharedIndexInformer.keyFunc == nil {
+		sharedIndexInformer.keyFunc = DeletionHandlingMetaNamespaceKeyFunc
+	}
+	if sharedIndexInformer.indexers == nil {
+		sharedIndexInformer.indexers = Indexers{}
+	}
+	sharedIndexInformer.indexer = NewIndexer(sharedIndexInformer.keyFunc, sharedIndexInformer.indexers)
+
 	return sharedIndexInformer
+}
+
+// SharedInformerOption defines the functional option type for the SharedInformer
+type SharedInformerOption func(*sharedIndexInformer)
+
+// WithResyncPeriod sets a custom resync period for the informer
+func WithResyncPeriod(t time.Duration) SharedInformerOption {
+	return func(s *sharedIndexInformer) {
+		s.resyncCheckPeriod = t
+		s.defaultEventHandlerResyncPeriod = t
+	}
+}
+
+// WithKeyFunction sets the key function for an informer
+func WithKeyFunction(k KeyFunc) SharedInformerOption {
+	return func(s *sharedIndexInformer) {
+		s.keyFunc = k
+	}
+}
+
+// WithIndexers sets the indexers for the informer
+func WithIndexers(ind Indexers) SharedInformerOption {
+	return func(s *sharedIndexInformer) {
+		s.indexers = ind
+	}
 }
 
 // InformerSynced is a function that can be used to determine if an informer has synced.  This is useful for determining if caches have synced.
@@ -244,7 +306,7 @@ func WaitForNamedCacheSync(controllerName string, stopCh <-chan struct{}, cacheS
 		return false
 	}
 
-	klog.Infof("Caches are synced for %s ", controllerName)
+	klog.Infof("Caches are synced for %s", controllerName)
 	return true
 }
 
@@ -288,6 +350,9 @@ type sharedIndexInformer struct {
 	indexer    Indexer
 	controller Controller
 
+	keyFunc  KeyFunc
+	indexers Indexers
+
 	processor             *sharedProcessor
 	cacheMutationDetector MutationDetector
 
@@ -318,6 +383,8 @@ type sharedIndexInformer struct {
 
 	// Called whenever the ListAndWatch drops the connection with an error.
 	watchErrorHandler WatchErrorHandler
+
+	transform TransformFunc
 }
 
 // dummyController hides the fact that a SharedInformer is different from a dedicated one
@@ -365,6 +432,18 @@ func (s *sharedIndexInformer) SetWatchErrorHandler(handler WatchErrorHandler) er
 	return nil
 }
 
+func (s *sharedIndexInformer) SetTransform(handler TransformFunc) error {
+	s.startedLock.Lock()
+	defer s.startedLock.Unlock()
+
+	if s.started {
+		return fmt.Errorf("informer has already started")
+	}
+
+	s.transform = handler
+	return nil
+}
+
 func (s *sharedIndexInformer) Run(stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 
@@ -373,6 +452,7 @@ func (s *sharedIndexInformer) Run(stopCh <-chan struct{}) {
 		return
 	}
 	fifo := NewDeltaFIFOWithOptions(DeltaFIFOOptions{
+		KeyFunction:           s.keyFunc,
 		KnownObjects:          s.indexer,
 		EmitDeltaTypeReplaced: true,
 	})
@@ -538,45 +618,47 @@ func (s *sharedIndexInformer) HandleDeltas(obj interface{}) error {
 	s.blockDeltas.Lock()
 	defer s.blockDeltas.Unlock()
 
-	// from oldest to newest
-	for _, d := range obj.(Deltas) {
-		switch d.Type {
-		case Sync, Replaced, Added, Updated:
-			s.cacheMutationDetector.AddObject(d.Object)
-			if old, exists, err := s.indexer.Get(d.Object); err == nil && exists {
-				if err := s.indexer.Update(d.Object); err != nil {
-					return err
-				}
+	if deltas, ok := obj.(Deltas); ok {
+		return processDeltas(s, s.indexer, s.transform, deltas)
+	}
+	return errors.New("object given as Process argument is not Deltas")
+}
 
-				isSync := false
-				switch {
-				case d.Type == Sync:
-					// Sync events are only propagated to listeners that requested resync
-					isSync = true
-				case d.Type == Replaced:
-					if accessor, err := meta.Accessor(d.Object); err == nil {
-						if oldAccessor, err := meta.Accessor(old); err == nil {
-							// Replaced events that didn't change resourceVersion are treated as resync events
-							// and only propagated to listeners that requested resync
-							isSync = accessor.GetResourceVersion() == oldAccessor.GetResourceVersion()
-						}
-					}
-				}
-				s.processor.distribute(updateNotification{oldObj: old, newObj: d.Object}, isSync)
-			} else {
-				if err := s.indexer.Add(d.Object); err != nil {
-					return err
-				}
-				s.processor.distribute(addNotification{newObj: d.Object}, false)
-			}
-		case Deleted:
-			if err := s.indexer.Delete(d.Object); err != nil {
-				return err
-			}
-			s.processor.distribute(deleteNotification{oldObj: d.Object}, false)
+// Conforms to ResourceEventHandler
+func (s *sharedIndexInformer) OnAdd(obj interface{}) {
+	// Invocation of this function is locked under s.blockDeltas, so it is
+	// save to distribute the notification
+	s.cacheMutationDetector.AddObject(obj)
+	s.processor.distribute(addNotification{newObj: obj}, false)
+}
+
+// Conforms to ResourceEventHandler
+func (s *sharedIndexInformer) OnUpdate(old, new interface{}) {
+	isSync := false
+
+	// If is a Sync event, isSync should be true
+	// If is a Replaced event, isSync is true if resource version is unchanged.
+	// If RV is unchanged: this is a Sync/Replaced event, so isSync is true
+
+	if accessor, err := meta.Accessor(new); err == nil {
+		if oldAccessor, err := meta.Accessor(old); err == nil {
+			// Events that didn't change resourceVersion are treated as resync events
+			// and only propagated to listeners that requested resync
+			isSync = accessor.GetResourceVersion() == oldAccessor.GetResourceVersion()
 		}
 	}
-	return nil
+
+	// Invocation of this function is locked under s.blockDeltas, so it is
+	// save to distribute the notification
+	s.cacheMutationDetector.AddObject(new)
+	s.processor.distribute(updateNotification{oldObj: old, newObj: new}, isSync)
+}
+
+// Conforms to ResourceEventHandler
+func (s *sharedIndexInformer) OnDelete(old interface{}) {
+	// Invocation of this function is locked under s.blockDeltas, so it is
+	// save to distribute the notification
+	s.processor.distribute(deleteNotification{oldObj: old}, false)
 }
 
 // sharedProcessor has a collection of processorListener and can

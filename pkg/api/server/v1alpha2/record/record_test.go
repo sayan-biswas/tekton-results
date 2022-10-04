@@ -17,11 +17,6 @@ package record
 import (
 	"context"
 	"fmt"
-	"io"
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/google/go-cmp/cmp"
 	cw "github.com/jonboulle/clockwork"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
@@ -36,7 +31,11 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"io"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"strings"
+	"testing"
+	"time"
 )
 
 var clock cw.Clock = cw.NewFakeClock()
@@ -50,21 +49,21 @@ func TestParseName(t *testing.T) {
 	}{
 		{
 			name: "simple",
-			in:   "a/results/b/records/c",
-			want: []string{"a", "b", "c"},
+			in:   "clusters/a/namespaces/b/results/c/records/d",
+			want: []string{"a", "b", "c", "d"},
 		},
 		{
 			name: "resource name reuse",
-			in:   "results/results/records/records/records",
-			want: []string{"results", "records", "records"},
+			in:   "clusters/clusters/namespaces/namespaces/results/results/records/records",
+			want: []string{"clusters", "namespaces", "results", "records"},
 		},
 		{
 			name: "missing name",
-			in:   "a/results/b/records/",
+			in:   "clusters/a/namespaces/b/results/c/records/",
 		},
 		{
 			name: "missing name, no slash",
-			in:   "a/results/b/records/",
+			in:   "clusters/a/namespaces/b/results/c/records",
 		},
 		{
 			name: "missing parent",
@@ -76,11 +75,11 @@ func TestParseName(t *testing.T) {
 		},
 		{
 			name: "wrong resource",
-			in:   "a/tacocat/b/records/c",
+			in:   "clusters/a/namespaces/b/wrong/c/records/c",
 		},
 		{
 			name: "result resource",
-			in:   "a/results/b",
+			in:   "clusters/a/namespaces/b/results/c",
 		},
 		{
 			name: "invalid parent",
@@ -88,11 +87,11 @@ func TestParseName(t *testing.T) {
 		},
 		{
 			name: "invalid name",
-			in:   "a/results/b/records/c/d",
+			in:   "clusters/a/namespaces/b/results/c/records/d/e",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			parent, result, name, err := ParseName(tc.in)
+			cluster, namespace, result, name, err := ParseName(tc.in)
 			if err != nil {
 				if tc.want == nil {
 					// error was expected, continue
@@ -101,10 +100,123 @@ func TestParseName(t *testing.T) {
 				t.Fatal(err)
 			}
 			if tc.want == nil {
-				t.Fatalf("expected error, got: [%s, %s]", parent, name)
+				t.Fatalf("expected error, got: [%s, %s, %s, %s]", cluster, namespace, result, name)
 			}
-			if parent != tc.want[0] || result != tc.want[1] || name != tc.want[2] {
-				t.Errorf("want: %v, got: [%s, %s, %s]", tc.want, parent, result, name)
+			if cluster != tc.want[0] || namespace != tc.want[1] || result != tc.want[2] || name != tc.want[3] {
+				t.Errorf("want: %v, got: [%s, %s, %s, %s]", tc.want, cluster, namespace, result, name)
+			}
+		})
+	}
+}
+
+func TestParseParent(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		// if want is nil, assume error
+		want []string
+	}{
+		{
+			name: "simple",
+			in:   "clusters/a/namespaces/b/results/c",
+			want: []string{"a", "b", "c"},
+		},
+		{
+			name: "resource name reuse",
+			in:   "clusters/clusters/namespaces/namespaces/results/results",
+			want: []string{"clusters", "namespaces", "results"},
+		},
+		{
+			name: "missing name",
+			in:   "clusters/a/namespaces/b/results/",
+		},
+		{
+			name: "missing name, no slash",
+			in:   "clusters/a/namespaces/b/results",
+		},
+		{
+			name: "wrong resource",
+			in:   "clusters/a/namespaces/b/wrong/c",
+		},
+		{
+			name: "no result resource",
+			in:   "clusters/a/namespaces/b",
+		},
+		{
+			name: "invalid parent",
+			in:   "a/b/results/c",
+		},
+		{
+			name: "invalid name",
+			in:   "clusters/a/namespaces/b/results/c/d",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cluster, namespace, result, err := ParseParent(tc.in)
+			if err != nil {
+				if tc.want == nil {
+					// error was expected, continue
+					return
+				}
+				t.Fatal(err)
+			}
+			if tc.want == nil {
+				t.Fatalf("expected error, got: [%s, %s, %s]", cluster, namespace, result)
+			}
+			if cluster != tc.want[0] || namespace != tc.want[1] || result != tc.want[2] {
+				t.Errorf("want: %v, got: [%s, %s, %s]", tc.want, cluster, namespace, result)
+			}
+		})
+	}
+}
+
+func TestParseParentDB(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		// if want is nil, assume error
+		want []string
+	}{
+		{
+			name: "simple",
+			in:   "a/b",
+			want: []string{"a", "b"},
+		},
+		{
+			name: "missing cluster",
+			in:   "/a",
+		},
+		{
+			name: "missing namespace",
+			in:   "a/",
+		},
+		{
+			name: "missing namespace, no slash",
+			in:   "a",
+		},
+		{
+			name: "less parameters",
+			in:   "abc",
+		},
+		{
+			name: "more parameters",
+			in:   "a/b/c",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cluster, namespace, err := ParseParentDB(tc.in)
+			if err != nil {
+				if tc.want == nil {
+					// error was expected, continue
+					return
+				}
+				t.Fatal(err)
+			}
+			if tc.want == nil {
+				t.Fatalf("expected error, got: [%s, %s]", cluster, namespace)
+			}
+			if cluster != tc.want[0] || namespace != tc.want[1] {
+				t.Errorf("want: %v, got: [%s, %s]", tc.want, cluster, namespace)
 			}
 		})
 	}
@@ -121,8 +233,8 @@ func TestToStorage(t *testing.T) {
 		{
 			name: "full",
 			in: &pb.Record{
-				Name: "foo/results/bar",
-				Id:   "a",
+				Name: "clusters/a/namespaces/b/results/c/records/d",
+				Id:   "1",
 				Data: &pb.Any{
 					Value: jsonutil.AnyBytes(t, data),
 				},
@@ -131,11 +243,11 @@ func TestToStorage(t *testing.T) {
 				Etag:        "tacocat",
 			},
 			want: &db.Record{
-				Parent:      "foo",
+				Parent:      "a/b",
 				ResultID:    "1",
-				ResultName:  "bar",
-				Name:        "baz",
-				ID:          "a",
+				ResultName:  "c",
+				Name:        "d",
+				ID:          "1",
 				Data:        jsonutil.AnyBytes(t, data),
 				CreatedTime: clock.Now(),
 				UpdatedTime: clock.Now(),
@@ -145,25 +257,25 @@ func TestToStorage(t *testing.T) {
 		{
 			name: "missing data",
 			in: &pb.Record{
-				Name:        "foo/results/bar",
-				Id:          "a",
-				CreatedTime: timestamppb.New(clock.Now()),
+				Name:       "clusters/a/namespaces/b/results/c/records/d",
+				Id:         "1",
+				CreateTime: timestamppb.New(clock.Now()),
 			},
 			want: &db.Record{
-				Parent:      "foo",
+				Parent:      "a/b",
 				ResultID:    "1",
-				ResultName:  "bar",
-				Name:        "baz",
-				ID:          "a",
+				ResultName:  "c",
+				Name:        "d",
+				ID:          "1",
 				CreatedTime: clock.Now(),
 			},
 		},
 		{
 			name: "deprecated fields", // If deprecated fields do not match their non-deprecated counterparts, prefer non-deprecated.
 			in: &pb.Record{
-				Name: "foo/results/bar",
-				Uid:  "a",
-				Id:   "b",
+				Name: "clusters/a/namespaces/b/results/c/records/d",
+				Uid:  "1",
+				Id:   "2",
 				Data: &pb.Any{
 					Value: jsonutil.AnyBytes(t, data),
 				},
@@ -174,11 +286,11 @@ func TestToStorage(t *testing.T) {
 				Etag:        "tacocat",
 			},
 			want: &db.Record{
-				Parent:      "foo",
+				Parent:      "a/b",
 				ResultID:    "1",
-				ResultName:  "bar",
-				Name:        "baz",
-				ID:          "a",
+				ResultName:  "c",
+				Name:        "d",
+				ID:          "1",
 				Data:        jsonutil.AnyBytes(t, data),
 				CreatedTime: clock.Now(),
 				UpdatedTime: clock.Now(),
@@ -187,7 +299,7 @@ func TestToStorage(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := ToStorage("foo", "bar", "1", "baz", tc.in, nil)
+			got, err := ToStorage("a", "b", "c", "1", "d", tc.in, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -206,8 +318,8 @@ func TestToStorage(t *testing.T) {
 		{
 			name: "invalid type",
 			in: &pb.Record{
-				Name: "foo/results/bar",
-				Id:   "a",
+				Name: "clusters/a/namespaces/b/results/c",
+				Id:   "1",
 				Data: &pb.Any{
 					Type: strings.Repeat("a", typeSize+1),
 				},
@@ -217,15 +329,15 @@ func TestToStorage(t *testing.T) {
 		{
 			name: "invalid data",
 			in: &pb.Record{
-				Name: "foo/results/bar",
-				Id:   "a",
+				Name: "clusters/a/namespaces/b/results/c",
+				Id:   "1",
 				Data: &pb.Any{},
 			},
 			want: codes.InvalidArgument,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := ToStorage("foo", "bar", "1", "baz", tc.in, nil)
+			got, err := ToStorage("a", "b", "c", "1", "d", tc.in, nil)
 			if status.Code(err) != tc.want {
 				t.Fatalf("expected %v, got (%v, %v)", tc.want, got, err)
 			}
@@ -243,19 +355,19 @@ func TestToAPI(t *testing.T) {
 		{
 			name: "full",
 			in: &db.Record{
-				Parent:      "foo",
+				Parent:      "a/b",
 				ResultID:    "1",
-				ResultName:  "bar",
-				Name:        "baz",
-				ID:          "a",
+				ResultName:  "c",
+				Name:        "d",
+				ID:          "1",
 				Data:        jsonutil.AnyBytes(t, data),
 				CreatedTime: clock.Now(),
 				Etag:        "etag",
 			},
 			want: &pb.Record{
-				Name: "foo/results/bar/records/baz",
-				Id:   "a",
-				Uid:  "a",
+				Name: "clusters/a/namespaces/b/results/c/records/d",
+				Id:   "1",
+				Uid:  "1",
 				Data: &pb.Any{
 					Value: jsonutil.AnyBytes(t, data),
 				},
@@ -267,16 +379,16 @@ func TestToAPI(t *testing.T) {
 		{
 			name: "partial",
 			in: &db.Record{
-				Parent:     "foo",
+				Parent:     "a/b",
 				ResultID:   "1",
-				ResultName: "bar",
-				Name:       "baz",
-				ID:         "a",
+				ResultName: "c",
+				Name:       "d",
+				ID:         "1",
 			},
 			want: &pb.Record{
-				Name: "foo/results/bar/records/baz",
-				Id:   "a",
-				Uid:  "a",
+				Name: "clusters/a/namespaces/b/results/c/records/d",
+				Id:   "1",
+				Uid:  "1",
 			},
 		},
 	} {
@@ -383,6 +495,22 @@ func TestToLogStreamer(t *testing.T) {
 func TestFormatName(t *testing.T) {
 	got := FormatName("a", "b")
 	want := "a/records/b"
+	if want != got {
+		t.Errorf("want %s, got %s", want, got)
+	}
+}
+
+func TestFormatParent(t *testing.T) {
+	got := FormatParent("a", "b", "c")
+	want := "clusters/a/namespaces/b/results/c"
+	if want != got {
+		t.Errorf("want %s, got %s", want, got)
+	}
+}
+
+func TestFormatParentDB(t *testing.T) {
+	got := FormatParentDB("a", "b")
+	want := "a/b"
 	if want != got {
 		t.Errorf("want %s, got %s", want, got)
 	}

@@ -13,7 +13,7 @@
 -- limitations under the License.
 
 CREATE TABLE results (
-	parent varchar(64),
+	parent varchar,
 	id varchar(64),
 
 	name varchar(64),
@@ -36,7 +36,7 @@ CREATE TABLE results (
 CREATE UNIQUE INDEX results_by_name ON results(parent, name);
 
 CREATE TABLE records (
-	parent varchar(64),
+	parent varchar,
 	result_id varchar(64),
 	id varchar(64),
 

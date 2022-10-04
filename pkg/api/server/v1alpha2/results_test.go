@@ -17,6 +17,8 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/tektoncd/results/pkg/api/server/v1alpha2/result"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -24,7 +26,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/tektoncd/results/pkg/api/server/db/pagination"
 	"github.com/tektoncd/results/pkg/api/server/test"
-	recordutil "github.com/tektoncd/results/pkg/api/server/v1alpha2/record"
+	"github.com/tektoncd/results/pkg/api/server/v1alpha2/record"
 	pb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -41,10 +43,10 @@ func TestCreateResult(t *testing.T) {
 
 	ctx := context.Background()
 	req := &pb.CreateResultRequest{
-		Parent: "foo",
+		Parent: result.FormatParent("a", "b"),
 		Result: &pb.Result{
-			Name:        "foo/results/bar",
-			Annotations: map[string]string{"foo": "bar"},
+			Name:        result.FormatName(result.FormatParent("a", "b"), "c"),
+			Annotations: map[string]string{"a": "b"},
 		},
 	}
 	t.Run("success", func(t *testing.T) {
@@ -60,6 +62,8 @@ func TestCreateResult(t *testing.T) {
 		want.Id = fmt.Sprint(lastID)
 		want.CreatedTime = timestamppb.New(clock.Now())
 		want.UpdatedTime = timestamppb.New(clock.Now())
+		want.CreateTime = timestamppb.New(clock.Now())
+		want.UpdateTime = timestamppb.New(clock.Now())
 		want.Etag = mockEtag(lastID, clock.Now().UnixNano())
 
 		if diff := cmp.Diff(got, want, protocmp.Transform()); diff != "" {
@@ -76,9 +80,9 @@ func TestCreateResult(t *testing.T) {
 		{
 			name: "mismatched parent",
 			req: &pb.CreateResultRequest{
-				Parent: "foo",
+				Parent: result.FormatParent("a", "b"),
 				Result: &pb.Result{
-					Name: "baz/results/bar",
+					Name: result.FormatName(result.FormatParent("x", "y"), "c"),
 				},
 			},
 			want: codes.InvalidArgument,
@@ -99,9 +103,9 @@ func TestCreateResult(t *testing.T) {
 		{
 			name: "large name",
 			req: &pb.CreateResultRequest{
-				Parent: "foo",
+				Parent: result.FormatParent("a", "b"),
 				Result: &pb.Result{
-					Name: "foo/results/" + strings.Repeat("a", 256),
+					Name: result.FormatName(result.FormatParent("a", "b"), strings.Repeat("a", 256)),
 				},
 			},
 			want: codes.InvalidArgument,
@@ -109,11 +113,11 @@ func TestCreateResult(t *testing.T) {
 		{
 			name: "large result summary type",
 			req: &pb.CreateResultRequest{
-				Parent: "foo",
+				Parent: result.FormatParent("a", "b"),
 				Result: &pb.Result{
-					Name: "foo/results/bar",
+					Name: result.FormatName(result.FormatParent("a", "b"), "c"),
 					Summary: &pb.RecordSummary{
-						Record: "foo/results/bar/records/baz",
+						Record: record.FormatName(record.FormatParent("a", "b", "c"), "d"),
 						Type:   strings.Repeat("a", 1024),
 					},
 				},
@@ -137,12 +141,9 @@ func TestUpdateResult(t *testing.T) {
 	ctx := context.Background()
 
 	tt := []struct {
-		name        string
-		requestName string // the `Name` field of the `UpdateResultRequest`
-		etag        string
-		update      *pb.Result
-		// `expect` is the expected result after an update request, it only contains two fields here: `Annotations` and `Etag`.
-		// the other fields will be set the same as the automatically created one.
+		name    string
+		etag    string
+		update  *pb.Result
 		expect  *pb.Result
 		errcode codes.Code
 	}{
@@ -151,7 +152,7 @@ func TestUpdateResult(t *testing.T) {
 			update: &pb.Result{
 				Annotations: map[string]string{"foo": "bar"},
 				Summary: &pb.RecordSummary{
-					Record: "foo/results/bar/records/baz",
+					Record: record.FormatName(record.FormatParent("a", "b", "c"), "d"),
 					Type:   "bar",
 				},
 			},
@@ -159,28 +160,34 @@ func TestUpdateResult(t *testing.T) {
 			expect: &pb.Result{
 				Annotations: map[string]string{"foo": "bar"},
 				Summary: &pb.RecordSummary{
-					Record: "foo/results/bar/records/baz",
+					Record: record.FormatName(record.FormatParent("a", "b", "c"), "d"),
 					Type:   "bar",
 				},
 			},
 		},
 		{
 			name:   "test update with empty result",
+			update: &pb.Result{},
 			expect: &pb.Result{},
 		},
 		// errors
 		{
-			name:        "test update with invalid name",
-			requestName: "invalid name",
-			errcode:     codes.InvalidArgument,
+			name: "test update with invalid name",
+			update: &pb.Result{
+				Name: result.FormatName(result.FormatParent("a", "b"), "invalid/name"),
+			},
+			errcode: codes.InvalidArgument,
 		},
 		{
-			name:        "test update a non-existent result",
-			requestName: "foo/results/bar-non-existent",
-			errcode:     codes.NotFound,
+			name: "test update a non-existent result",
+			update: &pb.Result{
+				Name: result.FormatName(result.FormatParent("a", "b"), "non-existent"),
+			},
+			errcode: codes.NotFound,
 		},
 		{
 			name:    "test update with invalid etag",
+			update:  &pb.Result{},
 			etag:    "invalid etag",
 			errcode: codes.FailedPrecondition,
 		},
@@ -194,8 +201,11 @@ func TestUpdateResult(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// create a result for test.
 			created, err := srv.CreateResult(ctx, &pb.CreateResultRequest{
-				Parent: "foo",
-				Result: &pb.Result{Name: fmt.Sprintf("foo/results/bar-%v", idx)}})
+				Parent: result.FormatParent("a", "b"),
+				Result: &pb.Result{
+					Name: result.FormatName(result.FormatParent("a", "b"), strconv.Itoa(idx)),
+				},
+			})
 			if err != nil {
 				t.Fatalf("could not create result: %v", err)
 			}
@@ -203,10 +213,11 @@ func TestUpdateResult(t *testing.T) {
 			// foward the time to test if the UpdateTime field is properly updated.
 			fakeClock.Advance(time.Second)
 
-			if tc.requestName == "" {
-				tc.requestName = created.GetName()
+			if tc.update.GetName() == "" {
+				tc.update.Name = created.GetName()
 			}
-			updated, err := srv.UpdateResult(ctx, &pb.UpdateResultRequest{Result: tc.update, Name: tc.requestName, Etag: tc.etag})
+
+			updated, err := srv.UpdateResult(ctx, &pb.UpdateResultRequest{Result: tc.update, Etag: tc.etag})
 			if err != nil || tc.errcode != codes.OK {
 				if status.Code(err) == tc.errcode {
 					return
@@ -244,9 +255,9 @@ func TestGetResult(t *testing.T) {
 
 	ctx := context.Background()
 	create, err := srv.CreateResult(ctx, &pb.CreateResultRequest{
-		Parent: "foo",
+		Parent: result.FormatParent("a", "b"),
 		Result: &pb.Result{
-			Name: "foo/results/bar",
+			Name: result.FormatName(result.FormatParent("a", "b"), "c"),
 		},
 	})
 	if err != nil {
@@ -274,7 +285,9 @@ func TestGetResult(t *testing.T) {
 		},
 		{
 			name: "not found",
-			req:  &pb.GetResultRequest{Name: "a/results/doesnotexist"},
+			req: &pb.GetResultRequest{
+				Name: result.FormatName(result.FormatParent("a", "b"), "non-existent"),
+			},
 			want: codes.NotFound,
 		},
 	} {
@@ -293,9 +306,9 @@ func TestDeleteResult(t *testing.T) {
 	}
 	ctx := context.Background()
 	r, err := srv.CreateResult(ctx, &pb.CreateResultRequest{
-		Parent: "foo",
+		Parent: result.FormatParent("a", "b"),
 		Result: &pb.Result{
-			Name: "foo/results/bar",
+			Name: result.FormatName(result.FormatParent("a", "b"), "c"),
 		},
 	})
 	if err != nil {
@@ -329,25 +342,25 @@ func TestCascadeDelete(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	result, err := srv.CreateResult(ctx, &pb.CreateResultRequest{
-		Parent: "foo",
+	res, err := srv.CreateResult(ctx, &pb.CreateResultRequest{
+		Parent: result.FormatParent("a", "b"),
 		Result: &pb.Result{
-			Name: "foo/results/bar",
+			Name: result.FormatName(result.FormatParent("a", "b"), "c"),
 		},
 	})
 	if err != nil {
 		t.Fatalf("CreateResult: %v", err)
 	}
 	r, err := srv.CreateRecord(ctx, &pb.CreateRecordRequest{
-		Parent: result.GetName(),
+		Parent: res.GetName(),
 		Record: &pb.Record{
-			Name: recordutil.FormatName(result.GetName(), "baz"),
+			Name: record.FormatName(res.GetName(), "d"),
 		},
 	})
 	if err != nil {
 		t.Fatalf("CreateRecord(): %v", err)
 	}
-	if _, err := srv.DeleteResult(ctx, &pb.DeleteResultRequest{Name: result.GetName()}); err != nil {
+	if _, err := srv.DeleteResult(ctx, &pb.DeleteResultRequest{Name: res.GetName()}); err != nil {
 		t.Fatalf("could not delete the result: %v", err)
 	}
 	if got, err := srv.GetRecord(ctx, &pb.GetRecordRequest{Name: r.GetName()}); status.Code(err) != codes.NotFound {
@@ -366,13 +379,13 @@ func TestListResults(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	parent := "foo"
+	parent := result.FormatParent("a", "b")
 	results := make([]*pb.Result, 0, 5)
 
 	for i := 1; i <= cap(results); i++ {
 		fakeClock.Advance(time.Second)
 		res, err := srv.CreateResult(ctx, &pb.CreateResultRequest{
-			Parent: "foo",
+			Parent: result.FormatParent("a", "b"),
 			Result: &pb.Result{
 				Name:        fmt.Sprintf("%s/results/%d", parent, i),
 				Annotations: map[string]string{"foo": fmt.Sprintf("bar-%d", i)},

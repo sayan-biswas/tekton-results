@@ -34,7 +34,7 @@ var (
 	uid = func() string {
 		return uuid.New().String()
 	}
-	clock cw.Clock = cw.NewRealClock()
+	clock = cw.NewRealClock()
 )
 
 type getResultID func(ctx context.Context, parent, result string) (string, error)

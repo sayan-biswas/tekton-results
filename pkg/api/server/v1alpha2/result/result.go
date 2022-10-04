@@ -33,15 +33,35 @@ import (
 
 var (
 	// NameRegex matches valid name specs for a Result.
-	NameRegex = regexp.MustCompile("(^[a-z0-9_-]{1,63})/results/([a-z0-9_-]{1,63}$)")
+	NameRegex     = regexp.MustCompile("^clusters/([a-z0-9:_-]{1,255})/namespaces/([a-z0-9_-]{1,63})/results/([a-z0-9_-]{1,63})$")
+	ParentRegex   = regexp.MustCompile("^clusters/([a-z0-9:_-]{1,255})/namespaces/([a-z0-9_-]{1,63})$")
+	ParentDBRegex = regexp.MustCompile("^([a-z0-9:_-]{1,255})/([a-z0-9_-]{1,63})$")
 )
+
+// ParseParent splits a top-level parent into its individual (cluster, namespace)
+func ParseParent(raw string) (cluster, namespace string, err error) {
+	s := ParentRegex.FindStringSubmatch(raw)
+	if len(s) != 3 {
+		return "", "", status.Errorf(codes.InvalidArgument, "parent must match %s", ParentRegex.String())
+	}
+	return s[1], s[2], nil
+}
 
 // ParseName splits a full Result name into its individual (parent, name)
 // components.
-func ParseName(raw string) (parent, name string, err error) {
+func ParseName(raw string) (cluster, namespace, name string, err error) {
 	s := NameRegex.FindStringSubmatch(raw)
+	if len(s) != 4 {
+		return "", "", "", status.Errorf(codes.InvalidArgument, "name must match %s", NameRegex.String())
+	}
+	return s[1], s[2], s[3], nil
+}
+
+// ParseParentDB splits database field parent into its individual (cluster, namespace)
+func ParseParentDB(raw string) (cluster, namespace string, err error) {
+	s := ParentDBRegex.FindStringSubmatch(raw)
 	if len(s) != 3 {
-		return "", "", status.Errorf(codes.InvalidArgument, "name must match %s", NameRegex.String())
+		return "", "", fmt.Errorf("error parsing parent from database, parent must match %s", ParentDBRegex.String())
 	}
 	return s[1], s[2], nil
 }
@@ -52,18 +72,32 @@ func FormatName(parent, name string) string {
 	return fmt.Sprintf("%s/results/%s", parent, name)
 }
 
+// FormatParent takes in a parent ("a") and result name ("b")
+func FormatParent(cluster, namespace string) string {
+	return fmt.Sprintf("clusters/%s/namespaces/%s", cluster, namespace)
+}
+
+// FormatParentDB takes in a parent ("a") and result name ("b")
+func FormatParentDB(cluster, namespace string) string {
+	return fmt.Sprintf("%s/%s", cluster, namespace)
+}
+
 // ToStorage converts an API Result into its corresponding database storage
 // equivalent.
 // parent,name should be the name parts (e.g. not containing "/results/").
 func ToStorage(r *pb.Result) (*db.Result, error) {
-	parent, name, err := ParseName(r.GetName())
+	cluster, namespace, name, err := ParseName(r.GetName())
 	if err != nil {
 		return nil, err
 	}
+
+	parent := FormatParentDB(cluster, namespace)
+
 	id := r.GetUid()
 	if id == "" {
 		id = r.GetId()
 	}
+
 	result := &db.Result{
 		Parent:      parent,
 		ID:          id,
@@ -110,13 +144,12 @@ func ToStorage(r *pb.Result) (*db.Result, error) {
 		}
 		result.Summary = summary
 	}
-
 	return result, nil
 }
 
 // ToAPI converts a database storage Result into its corresponding API
 // equivalent.
-func ToAPI(r *db.Result) *pb.Result {
+func ToAPI(r *db.Result) (*pb.Result, error) {
 	var summary *pb.RecordSummary
 	if r.Summary.Record != "" {
 		summary = &pb.RecordSummary{
@@ -128,9 +161,12 @@ func ToAPI(r *db.Result) *pb.Result {
 			Annotations: r.Summary.Annotations,
 		}
 	}
-
-	return &pb.Result{
-		Name:        FormatName(r.Parent, r.Name),
+	cluster, namespace, err := ParseParentDB(r.Parent)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.Result{
+		Name:        FormatName(FormatParent(cluster, namespace), r.Name),
 		Id:          r.ID,
 		Uid:         r.ID,
 		CreatedTime: timestamppb.New(r.CreatedTime),
@@ -141,6 +177,7 @@ func ToAPI(r *db.Result) *pb.Result {
 		Etag:        r.Etag,
 		Summary:     summary,
 	}
+	return out, nil
 }
 
 func newTS(t *time.Time) *timestamppb.Timestamp {

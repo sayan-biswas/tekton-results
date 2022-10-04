@@ -30,5 +30,5 @@ const (
 // Checker handles authentication and authorization checks for an action on
 // a resource.
 type Checker interface {
-	Check(ctx context.Context, parent, resource, verb string) error
+	Check(ctx context.Context, cluster, namespace, resource, verb string) error
 }

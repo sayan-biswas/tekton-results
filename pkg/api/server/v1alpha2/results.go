@@ -39,15 +39,18 @@ import (
 func (s *Server) CreateResult(ctx context.Context, req *pb.CreateResultRequest) (*pb.Result, error) {
 	r := req.GetResult()
 
-	// Validate the incoming request
-	parent, _, err := result.ParseName(r.GetName())
+	//Parse input request
+	cluster, namespace, _, err := result.ParseName(r.GetName())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	if req.GetParent() != parent {
+
+	if req.GetParent() != result.FormatParent(cluster, namespace) {
 		return nil, status.Error(codes.InvalidArgument, "requested parent does not match resource name")
 	}
-	if err := s.auth.Check(ctx, parent, auth.ResourceResults, auth.PermissionCreate); err != nil {
+
+	// Check access
+	if err := s.auth.Check(ctx, cluster, namespace, auth.ResourceResults, auth.PermissionCreate); err != nil {
 		return nil, err
 	}
 
@@ -62,6 +65,7 @@ func (s *Server) CreateResult(ctx context.Context, req *pb.CreateResultRequest) 
 	r.UpdatedTime = ts
 	r.UpdateTime = ts
 
+	// Insert in database
 	store, err := result.ToStorage(r)
 	if err != nil {
 		return nil, err
@@ -74,36 +78,54 @@ func (s *Server) CreateResult(ctx context.Context, req *pb.CreateResultRequest) 
 	if err := errors.Wrap(s.db.WithContext(ctx).Create(store).Error); err != nil {
 		return nil, err
 	}
-	return result.ToAPI(store), nil
+
+	return result.ToAPI(store)
 }
 
 // GetResult returns a single Result.
 func (s *Server) GetResult(ctx context.Context, req *pb.GetResultRequest) (*pb.Result, error) {
-	parent, name, err := result.ParseName(req.GetName())
+	//Parse input request
+	cluster, namespace, name, err := result.ParseName(req.GetName())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	if err := s.auth.Check(ctx, parent, auth.ResourceResults, auth.PermissionGet); err != nil {
+
+	// Check access
+	if err := s.auth.Check(ctx, cluster, namespace, auth.ResourceResults, auth.PermissionGet); err != nil {
 		return nil, err
 	}
+
+	// Format parent name
+	parent := result.FormatParentDB(cluster, namespace)
+
+	// Query database
 	store, err := getResultByParentName(s.db, parent, name)
 	if err != nil {
 		return nil, err
 	}
-	return result.ToAPI(store), nil
+
+	return result.ToAPI(store)
 }
 
 // UpdateResult updates a Result in the database.
 func (s *Server) UpdateResult(ctx context.Context, req *pb.UpdateResultRequest) (*pb.Result, error) {
-	// Retrieve result from database by name
-	parent, name, err := result.ParseName(req.GetName())
+	res := req.GetResult()
+
+	//Parse input request
+	cluster, namespace, name, err := result.ParseName(res.GetName())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	if err := s.auth.Check(ctx, parent, auth.ResourceResults, auth.PermissionUpdate); err != nil {
+
+	// Check access
+	if err := s.auth.Check(ctx, cluster, namespace, auth.ResourceResults, auth.PermissionUpdate); err != nil {
 		return nil, err
 	}
 
+	// Format parent name
+	parent := result.FormatParentDB(cluster, namespace)
+
+	// Update database
 	var out *pb.Result
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		prev, err := getResultByParentName(tx, parent, name)
@@ -117,7 +139,10 @@ func (s *Server) UpdateResult(ctx context.Context, req *pb.UpdateResultRequest) 
 			return status.Error(codes.FailedPrecondition, "the etag mismatches")
 		}
 
-		newpb := result.ToAPI(prev)
+		newpb, err := result.ToAPI(prev)
+		if err != nil {
+			return err
+		}
 		reqpb := req.GetResult()
 		protoutil.ClearOutputOnly(reqpb)
 		// Merge requested Result with previous Result to apply updates,
@@ -143,8 +168,10 @@ func (s *Server) UpdateResult(ctx context.Context, req *pb.UpdateResultRequest) 
 			log.Printf("failed to save result into database: %v", err)
 			return err
 		}
-		out = result.ToAPI(toDB)
-
+		out, err = result.ToAPI(toDB)
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 	return out, err
@@ -152,36 +179,40 @@ func (s *Server) UpdateResult(ctx context.Context, req *pb.UpdateResultRequest) 
 
 // DeleteResult deletes a given result.
 func (s *Server) DeleteResult(ctx context.Context, req *pb.DeleteResultRequest) (*empty.Empty, error) {
-	parent, name, err := result.ParseName(req.GetName())
+	//Parse input request
+	cluster, namespace, name, err := result.ParseName(req.GetName())
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	if err := s.auth.Check(ctx, parent, auth.ResourceResults, auth.PermissionDelete); err != nil {
+
+	// Check access
+	if err := s.auth.Check(ctx, cluster, namespace, auth.ResourceResults, auth.PermissionDelete); err != nil {
 		return nil, err
 	}
 
-	// First get the current result. This ensures that we return NOT_FOUND if
-	// the entry is already deleted.
-	// This does not need to be done in the same transaction as the delete,
-	// since the identifiers are immutable.
-	r := &db.Result{}
-	get := s.db.WithContext(ctx).
-		Where(&db.Result{Parent: parent, Name: name}).
-		First(r)
-	if err := errors.Wrap(get.Error); err != nil {
+	// Format parent name
+	parent := result.FormatParentDB(cluster, namespace)
+
+	// Check whether result exists
+	r, err := getResultByParentName(s.db, parent, name)
+	if err != nil {
 		return &empty.Empty{}, err
 	}
 
 	// Delete the result.
-	delete := s.db.WithContext(ctx).Delete(&db.Result{}, r)
-	return &empty.Empty{}, errors.Wrap(delete.Error)
+	d := s.db.WithContext(ctx).Delete(&db.Result{}, r)
+	return &empty.Empty{}, errors.Wrap(d.Error)
 }
 
 func (s *Server) ListResults(ctx context.Context, req *pb.ListResultsRequest) (*pb.ListResultsResponse, error) {
-	if req.GetParent() == "" {
-		return nil, status.Error(codes.InvalidArgument, "parent missing")
+	//Parse input request
+	cluster, namespace, err := result.ParseParent(req.Parent)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	if err := s.auth.Check(ctx, req.GetParent(), auth.ResourceResults, auth.PermissionList); err != nil {
+
+	// Check access
+	if err := s.auth.Check(ctx, cluster, namespace, auth.ResourceResults, auth.PermissionList); err != nil {
 		return nil, err
 	}
 
@@ -204,8 +235,12 @@ func (s *Server) ListResults(ctx context.Context, req *pb.ListResultsRequest) (*
 	if err != nil {
 		return nil, err
 	}
+
+	// Format parent name
+	parent := result.FormatParentDB(cluster, namespace)
+
 	// Fetch n+1 items to get the next token.
-	out, err := s.getFilteredPaginatedSortedResults(ctx, req.GetParent(), start, userPageSize+1, prg, sortOrder)
+	out, err := s.getFilteredPaginatedSortedResults(ctx, parent, start, userPageSize+1, prg, sortOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -234,6 +269,7 @@ func (s *Server) ListResults(ctx context.Context, req *pb.ListResultsRequest) (*
 func (s *Server) getFilteredPaginatedSortedResults(ctx context.Context, parent string, start string, pageSize int, prg cel.Program, sortOrder string) ([]*pb.Result, error) {
 	out := make([]*pb.Result, 0, pageSize)
 	batcher := pagination.NewBatcher(pageSize, minPageSize, maxPageSize)
+
 	for len(out) < pageSize {
 		batchSize := batcher.Next()
 		dbresults := make([]*db.Result, 0, batchSize)
@@ -248,7 +284,10 @@ func (s *Server) getFilteredPaginatedSortedResults(ctx context.Context, parent s
 
 		// Only return results that match the filter.
 		for _, r := range dbresults {
-			api := result.ToAPI(r)
+			api, err := result.ToAPI(r)
+			if err != nil {
+				return nil, err
+			}
 			ok, err := result.Match(api, prg)
 			if err != nil {
 				return nil, err
@@ -263,7 +302,7 @@ func (s *Server) getFilteredPaginatedSortedResults(ctx context.Context, parent s
 			}
 		}
 
-		// We fetched less results than requested - this means we've exhausted
+		// We fetched fewer results than requested - this means we've exhausted
 		// all items.
 		if len(dbresults) < batchSize {
 			break
@@ -272,7 +311,6 @@ func (s *Server) getFilteredPaginatedSortedResults(ctx context.Context, parent s
 		// Set params for next batch.
 		start = dbresults[len(dbresults)-1].ID
 		batcher.Update(len(dbresults), batchSize)
-
 	}
 	return out, nil
 }

@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"time"
 
+	logicalcluster "github.com/kcp-dev/logicalcluster/v2"
 	v1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -43,6 +44,7 @@ type NetworkPoliciesGetter interface {
 type NetworkPolicyInterface interface {
 	Create(ctx context.Context, networkPolicy *v1.NetworkPolicy, opts metav1.CreateOptions) (*v1.NetworkPolicy, error)
 	Update(ctx context.Context, networkPolicy *v1.NetworkPolicy, opts metav1.UpdateOptions) (*v1.NetworkPolicy, error)
+	UpdateStatus(ctx context.Context, networkPolicy *v1.NetworkPolicy, opts metav1.UpdateOptions) (*v1.NetworkPolicy, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
 	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.NetworkPolicy, error)
@@ -50,20 +52,23 @@ type NetworkPolicyInterface interface {
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.NetworkPolicy, err error)
 	Apply(ctx context.Context, networkPolicy *networkingv1.NetworkPolicyApplyConfiguration, opts metav1.ApplyOptions) (result *v1.NetworkPolicy, err error)
+	ApplyStatus(ctx context.Context, networkPolicy *networkingv1.NetworkPolicyApplyConfiguration, opts metav1.ApplyOptions) (result *v1.NetworkPolicy, err error)
 	NetworkPolicyExpansion
 }
 
 // networkPolicies implements NetworkPolicyInterface
 type networkPolicies struct {
-	client rest.Interface
-	ns     string
+	client  rest.Interface
+	cluster logicalcluster.Name
+	ns      string
 }
 
 // newNetworkPolicies returns a NetworkPolicies
 func newNetworkPolicies(c *NetworkingV1Client, namespace string) *networkPolicies {
 	return &networkPolicies{
-		client: c.RESTClient(),
-		ns:     namespace,
+		client:  c.RESTClient(),
+		cluster: c.cluster,
+		ns:      namespace,
 	}
 }
 
@@ -71,6 +76,7 @@ func newNetworkPolicies(c *NetworkingV1Client, namespace string) *networkPolicie
 func (c *networkPolicies) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.NetworkPolicy, err error) {
 	result = &v1.NetworkPolicy{}
 	err = c.client.Get().
+		Cluster(c.cluster).
 		Namespace(c.ns).
 		Resource("networkpolicies").
 		Name(name).
@@ -88,6 +94,7 @@ func (c *networkPolicies) List(ctx context.Context, opts metav1.ListOptions) (re
 	}
 	result = &v1.NetworkPolicyList{}
 	err = c.client.Get().
+		Cluster(c.cluster).
 		Namespace(c.ns).
 		Resource("networkpolicies").
 		VersionedParams(&opts, scheme.ParameterCodec).
@@ -105,6 +112,7 @@ func (c *networkPolicies) Watch(ctx context.Context, opts metav1.ListOptions) (w
 	}
 	opts.Watch = true
 	return c.client.Get().
+		Cluster(c.cluster).
 		Namespace(c.ns).
 		Resource("networkpolicies").
 		VersionedParams(&opts, scheme.ParameterCodec).
@@ -116,6 +124,7 @@ func (c *networkPolicies) Watch(ctx context.Context, opts metav1.ListOptions) (w
 func (c *networkPolicies) Create(ctx context.Context, networkPolicy *v1.NetworkPolicy, opts metav1.CreateOptions) (result *v1.NetworkPolicy, err error) {
 	result = &v1.NetworkPolicy{}
 	err = c.client.Post().
+		Cluster(c.cluster).
 		Namespace(c.ns).
 		Resource("networkpolicies").
 		VersionedParams(&opts, scheme.ParameterCodec).
@@ -129,6 +138,7 @@ func (c *networkPolicies) Create(ctx context.Context, networkPolicy *v1.NetworkP
 func (c *networkPolicies) Update(ctx context.Context, networkPolicy *v1.NetworkPolicy, opts metav1.UpdateOptions) (result *v1.NetworkPolicy, err error) {
 	result = &v1.NetworkPolicy{}
 	err = c.client.Put().
+		Cluster(c.cluster).
 		Namespace(c.ns).
 		Resource("networkpolicies").
 		Name(networkPolicy.Name).
@@ -139,9 +149,26 @@ func (c *networkPolicies) Update(ctx context.Context, networkPolicy *v1.NetworkP
 	return
 }
 
+// UpdateStatus was generated because the type contains a Status member.
+// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
+func (c *networkPolicies) UpdateStatus(ctx context.Context, networkPolicy *v1.NetworkPolicy, opts metav1.UpdateOptions) (result *v1.NetworkPolicy, err error) {
+	result = &v1.NetworkPolicy{}
+	err = c.client.Put().
+		Namespace(c.ns).
+		Resource("networkpolicies").
+		Name(networkPolicy.Name).
+		SubResource("status").
+		VersionedParams(&opts, scheme.ParameterCodec).
+		Body(networkPolicy).
+		Do(ctx).
+		Into(result)
+	return
+}
+
 // Delete takes name of the networkPolicy and deletes it. Returns an error if one occurs.
 func (c *networkPolicies) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
 	return c.client.Delete().
+		Cluster(c.cluster).
 		Namespace(c.ns).
 		Resource("networkpolicies").
 		Name(name).
@@ -157,6 +184,7 @@ func (c *networkPolicies) DeleteCollection(ctx context.Context, opts metav1.Dele
 		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
 	}
 	return c.client.Delete().
+		Cluster(c.cluster).
 		Namespace(c.ns).
 		Resource("networkpolicies").
 		VersionedParams(&listOpts, scheme.ParameterCodec).
@@ -170,6 +198,7 @@ func (c *networkPolicies) DeleteCollection(ctx context.Context, opts metav1.Dele
 func (c *networkPolicies) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.NetworkPolicy, err error) {
 	result = &v1.NetworkPolicy{}
 	err = c.client.Patch(pt).
+		Cluster(c.cluster).
 		Namespace(c.ns).
 		Resource("networkpolicies").
 		Name(name).
@@ -197,9 +226,40 @@ func (c *networkPolicies) Apply(ctx context.Context, networkPolicy *networkingv1
 	}
 	result = &v1.NetworkPolicy{}
 	err = c.client.Patch(types.ApplyPatchType).
+		Cluster(c.cluster).
 		Namespace(c.ns).
 		Resource("networkpolicies").
 		Name(*name).
+		VersionedParams(&patchOpts, scheme.ParameterCodec).
+		Body(data).
+		Do(ctx).
+		Into(result)
+	return
+}
+
+// ApplyStatus was generated because the type contains a Status member.
+// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
+func (c *networkPolicies) ApplyStatus(ctx context.Context, networkPolicy *networkingv1.NetworkPolicyApplyConfiguration, opts metav1.ApplyOptions) (result *v1.NetworkPolicy, err error) {
+	if networkPolicy == nil {
+		return nil, fmt.Errorf("networkPolicy provided to Apply must not be nil")
+	}
+	patchOpts := opts.ToPatchOptions()
+	data, err := json.Marshal(networkPolicy)
+	if err != nil {
+		return nil, err
+	}
+
+	name := networkPolicy.Name
+	if name == nil {
+		return nil, fmt.Errorf("networkPolicy.Name must be provided to Apply")
+	}
+
+	result = &v1.NetworkPolicy{}
+	err = c.client.Patch(types.ApplyPatchType).
+		Namespace(c.ns).
+		Resource("networkpolicies").
+		Name(*name).
+		SubResource("status").
 		VersionedParams(&patchOpts, scheme.ParameterCodec).
 		Body(data).
 		Do(ctx).

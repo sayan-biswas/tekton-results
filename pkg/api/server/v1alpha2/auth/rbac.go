@@ -16,6 +16,7 @@ package auth
 
 import (
 	"context"
+	"k8s.io/client-go/rest"
 	"log"
 	"strings"
 
@@ -41,14 +42,18 @@ type RBAC struct {
 	authz authzclient.AuthorizationV1Interface
 }
 
-func NewRBAC(client kubernetes.Interface) *RBAC {
+func NewRBAC(config *rest.Config) *RBAC {
+	client, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Printf("Error creating cluster clientset: %v", err)
+	}
 	return &RBAC{
 		authn: client.AuthenticationV1(),
 		authz: client.AuthorizationV1(),
 	}
 }
 
-func (r *RBAC) Check(ctx context.Context, namespace, resource, verb string) error {
+func (r *RBAC) Check(ctx context.Context, cluster, namespace, resource, verb string) error {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return status.Error(codes.Unauthenticated, "unable to get context metadata")
