@@ -1,0 +1,28 @@
+---
+# Triggers Tekton Results api image build on pull request
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: tekton-results-api-on-pull-request
+  annotations:
+    pipelinesascode.tekton.dev/on-event: "[pull_request]"
+    # Use pipelines-svc-0.1-f2134db branch since we are using openshift-pipeline/tektoncd-results and not upstream
+    pipelinesascode.tekton.dev/on-target-branch: "[pipeline-svc-0.1-f2134db]"
+    pipelinesascode.tekton.dev/max-keep-runs: "5"
+spec:
+  params:
+    - name: git-url
+      value: "{{repo_url}}"
+    - name: revision
+      value: "{{revision}}"
+    - name: output-image
+      value: "quay.io/redhat-appstudio/pull-request-builds:tekton-results-api-{{revision}}"
+    - name: dockerfile
+      value: images/api/Dockerfile
+  pipelineRef:
+    name: docker-build
+    bundle: quay.io/redhat-appstudio/hacbs-core-service-templates-bundle:latest
+  workspaces:
+    - name: workspace
+      persistentVolumeClaim:
+        claimName: app-studio-default-workspace
