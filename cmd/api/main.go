@@ -19,26 +19,26 @@ package main
 import (
 	"context"
 	"fmt"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"log"
 	"net"
 	"net/http"
 	"path"
 
-	"github.com/tektoncd/results/pkg/api/server/v1alpha2/auth"
-	_ "go.uber.org/automaxprocs"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/credentials/insecure"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 
 	prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/viper"
 	v1alpha2 "github.com/tektoncd/results/pkg/api/server/v1alpha2"
+	"github.com/tektoncd/results/pkg/api/server/v1alpha2/auth"
 	v1alpha2pb "github.com/tektoncd/results/proto/v1alpha2/results_go_proto"
+	_ "go.uber.org/automaxprocs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
@@ -60,9 +60,13 @@ type ConfigFile struct {
 	LOG_LEVEL             string `mapstructure:"LOG_LEVEL"`
 	TLS_HOSTNAME_OVERRIDE string `mapstructure:"TLS_HOSTNAME_OVERRIDE"`
 	TLS_PATH              string `mapstructure:"TLS_PATH"`
+	LOGS_API              bool   `mapstructure:"LOGS_API"`
 }
 
 func main() {
+
+	viper.AddConfigPath("./config/env")
+	viper.AddConfigPath("/etc/config/server")
 	viper.AddConfigPath("./env")
 	viper.SetConfigName("config")
 	viper.SetConfigType("env")
@@ -130,6 +134,9 @@ func main() {
 		grpc.UnaryInterceptor(prometheus.UnaryServerInterceptor),
 	)
 	v1alpha2pb.RegisterResultsServer(s, v1a2)
+	if configFile.LOGS_API {
+		v1alpha2pb.RegisterLogsServer(s, v1a2)
+	}
 
 	// Allow service reflection - required for grpc_cli ls to work.
 	reflection.Register(s)
