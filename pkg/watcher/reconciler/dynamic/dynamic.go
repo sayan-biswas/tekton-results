@@ -16,12 +16,19 @@ package dynamic
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/jonboulle/clockwork"
+	"github.com/tektoncd/cli/pkg/cli"
+	tknlog "github.com/tektoncd/cli/pkg/log"
+	tknopts "github.com/tektoncd/cli/pkg/options"
 	pipelinev1beta1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	"github.com/tektoncd/results/pkg/apis/v1alpha2"
 	"github.com/tektoncd/results/pkg/watcher/convert"
+	"github.com/tektoncd/results/pkg/watcher/logs"
 	"github.com/tektoncd/results/pkg/watcher/reconciler"
 	"github.com/tektoncd/results/pkg/watcher/reconciler/annotation"
 	"github.com/tektoncd/results/pkg/watcher/results"
@@ -43,8 +50,14 @@ var (
 // Object types.
 type Reconciler struct {
 	resultsClient *results.Client
+	logsClient    pb.LogsClient
 	objectClient  ObjectClient
 	cfg           *reconciler.Config
+}
+
+func init() {
+	// Disable colorized output from the tkn CLI.
+	color.NoColor = true
 }
 
 // NewDynamicReconciler creates a new dynamic Reconciler.
@@ -75,6 +88,35 @@ func (r *Reconciler) Reconcile(ctx context.Context, o results.Object) error {
 	if err != nil {
 		logger.Debugw("Error updating Record", zap.Error(err))
 		return err
+	}
+
+	var logName string
+
+	if !o.GetObjectKind().GroupVersionKind().Empty() && o.GetObjectKind().GroupVersionKind().Kind == "TaskRun" {
+		// Create a log record if the object has/supports logs
+		// For now this is just TaskRuns.
+		logResult, logRecord, err := r.resultsClient.PutLog(ctx, o)
+		if err != nil {
+			logger.Errorf("error creating TaskRun log Record: %v", err)
+			return err
+		}
+		if logRecord != nil {
+			logName = logRecord.GetName()
+		}
+		needsStream, err := needsLogsStreamed(logRecord)
+		if err != nil {
+			logger.Errorf("error determining if logs need to be streamed: %v", err)
+			return err
+		}
+		if needsStream {
+			logger.Infof("streaming logs for TaskRun %s/%s", o.GetNamespace(), o.GetName())
+			err = r.streamLogs(ctx, logResult, logRecord, o)
+			if err != nil {
+				logger.Errorf("error streaming logs: %v", err)
+				return err
+			}
+			logger.Infof("finished streaming logs for TaskRun %s/%s", o.GetNamespace(), o.GetName())
+		}
 	}
 
 	logger = logger.With(zap.String("results.tekton.dev/result", result.Name),
@@ -116,7 +158,7 @@ func (r *Reconciler) addResultsAnnotations(ctx context.Context, o results.Object
 // conditions are met:
 // * The resource deletion is enabled in the config (the grace period is greater
 // than 0).
-// * The object is done and it isn't owned by other object.
+// * The object is done, and it isn't owned by other object.
 // * The configured grace period has elapsed since the object's completion.
 func (r *Reconciler) deleteUponCompletion(ctx context.Context, o results.Object) error {
 	logger := logging.FromContext(ctx)
@@ -167,6 +209,47 @@ func (r *Reconciler) deleteUponCompletion(ctx context.Context, o results.Object)
 	return nil
 }
 
+func (r *Reconciler) streamLogs(ctx context.Context, res *pb.Result, rec *pb.Record, o metav1.Object) error {
+	logClient, err := r.logsClient.UpdateLog(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create PutLog client: %v", err)
+	}
+	writer := logs.NewLogWriter(logClient, rec.GetName(), logs.DefaultMaxLogChunkSize)
+
+	tknParams := &cli.TektonParams{}
+	tknParams.SetNamespace(o.GetNamespace())
+	// KLUGE: tkn reader.Read() will raise an error if a step in the TaskRun failed and there is no
+	// Err writer in the Stream object. This will result in some "error" messages being written to
+	// the log.
+
+	// TODO: Set TaskrunName or PipelinerunName based on object type
+	reader, err := tknlog.NewReader(tknlog.LogTypeTask, &tknopts.LogOptions{
+		AllSteps:    true,
+		Params:      tknParams,
+		TaskrunName: o.GetName(),
+		Stream: &cli.Stream{
+			Out: writer,
+			Err: writer,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create tkn reader: %v", err)
+	}
+	logChan, errChan, err := reader.Read()
+	if err != nil {
+		return fmt.Errorf("error reading from tkn reader: %v", err)
+	}
+	// errChan receives stderr from the TaskRun containers.
+	// This will be forwarded as combined output (stdout and stderr)
+
+	// TODO: Set writer type based on the object type
+	tknlog.NewWriter(tknlog.LogTypeTask, true).Write(&cli.Stream{
+		Out: writer,
+		Err: writer,
+	}, logChan, errChan)
+	return logClient.CloseSend()
+}
+
 func isDone(o results.Object) bool {
 	return o.GetStatusCondition().GetCondition(apis.ConditionSucceeded).IsTrue()
 }
@@ -192,4 +275,20 @@ func getCompletionTime(object results.Object) (*time.Time, error) {
 		return nil, controller.NewPermanentError(fmt.Errorf("error getting completion time from incoming object: unrecognized type %T", o))
 	}
 	return completionTime, nil
+}
+
+func needsLogsStreamed(rec *pb.Record) (bool, error) {
+	if rec.GetData().Type != v1alpha2.TaskRunLogRecordType {
+		return false, nil
+	}
+	trl := &v1alpha2.TaskRunLog{}
+	err := json.Unmarshal(rec.GetData().GetValue(), trl)
+	if err != nil {
+		return false, err
+	}
+	needsStream := trl.Spec.Type == v1alpha2.FileLogType
+	if trl.Status.File != nil {
+		needsStream = needsStream && trl.Status.File.Size <= 0
+	}
+	return needsStream, nil
 }
