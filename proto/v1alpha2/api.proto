@@ -30,65 +30,65 @@ option go_package = "github.com/tektoncd/results/proto/v1alpha2/results_go_proto
 service Results {
   rpc CreateResult(CreateResultRequest) returns (Result) {
     option (google.api.http) = {
-      post: "/v1alpha2/{parent=*}/results"
+      post: "/apis/results.tekton.dev/v1alpha2/results/{parent=*}/results"
       body: "result"
     };
   }
 
   rpc UpdateResult(UpdateResultRequest) returns (Result) {
     option (google.api.http) = {
-      patch: "/v1alpha2/{result.name=*/results/*}"
+      patch: "/apis/results.tekton.dev/v1alpha2/results/{result.name=*/results/*}"
       body: "result"
     };
   }
 
   rpc GetResult(GetResultRequest) returns (Result) {
     option (google.api.http) = {
-      get: "/v1alpha2/{name=*/results/*}"
+      get: "/apis/results.tekton.dev/v1alpha2/results/{name=*/results/*}"
     };
   }
 
   rpc DeleteResult(DeleteResultRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
-      delete: "/v1alpha2/{name=*/results/*}"
+      delete: "/apis/results.tekton.dev/v1alpha2/results/{name=*/results/*}"
     };
   }
 
   rpc ListResults(ListResultsRequest) returns (ListResultsResponse) {
     option (google.api.http) = {
-      get: "/v1alpha2/{parent=*}/results"
+      get: "/apis/results.tekton.dev/v1alpha2/results/{parent=*}/results"
     };
   }
 
   rpc CreateRecord(CreateRecordRequest) returns (Record) {
     option (google.api.http) = {
-      post: "/v1alpha2/{parent=*/results/*}/records"
+      post: "/apis/results.tekton.dev/v1alpha2/results/{parent=*/results/*}/records"
       body: "record"
     };
   }
 
   rpc UpdateRecord(UpdateRecordRequest) returns (Record) {
     option (google.api.http) = {
-      patch: "/v1alpha2/{record.name=*/results/*/records/*}"
+      patch: "/apis/results.tekton.dev/v1alpha2/results/{record.name=*/results/*/records/*}"
       body: "record"
     };
   }
 
   rpc GetRecord(GetRecordRequest) returns (Record) {
     option (google.api.http) = {
-      get: "/v1alpha2/{name=*/results/*/records/*}"
+      get: "/apis/results.tekton.dev/v1alpha2/results/{name=*/results/*/records/*}"
     };
   }
 
   rpc ListRecords(ListRecordsRequest) returns (ListRecordsResponse) {
     option (google.api.http) = {
-      get: "/v1alpha2/{parent=*/results/*}/records"
+      get: "/apis/results.tekton.dev/v1alpha2/results/{parent=*/results/*}/records"
     };
   }
 
   rpc DeleteRecord(DeleteRecordRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
-      delete: "/v1alpha2/{name=*/results/*/records/*}"
+      delete: "/apis/results.tekton.dev/v1alpha2/results/{name=*/results/*/records/*}"
     };
   }
 }
@@ -96,14 +96,14 @@ service Results {
 service Logs {
   rpc GetLog(GetLogRequest) returns (stream Log) {
     option (google.api.http) = {
-      get: "/v1alpha2/{name=*/results/*/logs/*}"
+      get: "/apis/results.tekton.dev/v1alpha2/logs/{name=*/results/*/records/*}"
     };
     option (google.api.method_signature) = "name";
   }
 
-  rpc ListLogs(ListLogsRequest) returns (ListLogsResponse) {
+  rpc ListLogs(ListRecordsRequest) returns (ListRecordsResponse) {
     option (google.api.http) = {
-      get: "/v1alpha2/{parent=*/results/*}/logs"
+      get: "/apis/results.tekton.dev/v1alpha2/logs/{parent=*/results/*}/logs"
     };
     option (google.api.method_signature) = "parent";
   }
@@ -114,7 +114,7 @@ service Logs {
 
   rpc DeleteLog(DeleteLogRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
-      delete: "/v1alpha2/{name=*/results/*/logs/*}"
+      delete: "/apis/results.tekton.dev/v1alpha2/logs/{name=*/results/*/records/*}"
     };
     option (google.api.method_signature) = "name";
   }
@@ -205,8 +205,6 @@ message ListRecordsResponse {
 }
 
 message GetLogRequest {
-  // Name of the log to retrieve.
-  // Format: {namespace}/results/{result}/logs/{record}
   string name = 1 [
     (google.api.field_behavior) = REQUIRED,
     (google.api.resource_reference) = {
@@ -214,37 +212,7 @@ message GetLogRequest {
     }];
 }
 
-message ListLogsRequest {
-  // The parent, which owns this collection of logs.
-  // Format: {namespace}/results/{result}
-  string parent = 1 [
-    (google.api.field_behavior) = REQUIRED,
-    (google.api.resource_reference) = {
-      type: "tekton.results.v1alpha2/Result"
-      child_type: "tekton.results.v1alpha2/Record"
-    }];
-
-  int32 page_size = 2;
-
-  string page_token = 3;
-
-  string filter = 4;
-
-  string order_by = 5;
-}
-
-message ListLogsResponse {
-  // The collection of logs
-  repeated LogSummary logs = 1;
-
-  // A token, which can be sent as `page_token` to retrieve the next page.
-  // If this field is omitted, there are no subsequent pages.
-  string next_page_token = 2;
-}
-
 message DeleteLogRequest {
-  // Name of the log to delete.
-  // Format: {namespace}/results/{result}/logs/{record}
   string name = 1 [
     (google.api.field_behavior) = REQUIRED,
     (google.api.resource_reference) = {
