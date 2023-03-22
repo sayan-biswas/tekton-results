@@ -7,7 +7,7 @@ metadata:
   annotations:
     pipelinesascode.tekton.dev/on-event: "[pull_request]"
     # Use downstream branch since we are using openshift-pipeline/tektoncd-results and not upstream
-    pipelinesascode.tekton.dev/on-target-branch: "[downstream]"
+    pipelinesascode.tekton.dev/on-target-branch: "[downstream-*]"
     pipelinesascode.tekton.dev/max-keep-runs: "5"
 spec:
   params:
