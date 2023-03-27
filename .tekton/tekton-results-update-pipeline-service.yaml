@@ -39,7 +39,7 @@ spec:
           - name: TARGET_GH_REPO
             value: openshift-pipelines/pipeline-service
           - name: GITHUB_APP_INSTALLATION_ID
-            value: "28617334"
+            value: "35628851"
         taskRef:
           bundle: quay.io/redhat-appstudio-tekton-catalog/task-update-infra-deployments:0.1
           name: update-infra-deployments
