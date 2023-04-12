@@ -22,6 +22,10 @@ resources:
 - config-leader-election.yaml
 - config-logging.yaml
 - config-observability.yaml
+
+patchesStrategicMerge:
+  - migrator.yaml
+
 configMapGenerator:
   # Create a ConfigMap containing the API configs.
   - name: api-config
