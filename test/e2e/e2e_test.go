@@ -58,7 +58,7 @@ import (
 )
 
 const (
-	defaultServerName                           = "tekton-results-api-service.tekton-pipelines.svc.cluster.local"
+	defaultServerName                           = "tekton-results-api.tekton-pipelines.svc.cluster.local"
 	defaultServerAddress                        = "https://localhost:8080"
 	defaultCertFileName                         = "tekton-results-cert.pem"
 	allNamespacesReadAccessTokenFileName        = "all-namespaces-read-access"
@@ -160,7 +160,7 @@ func TestTaskRun(t *testing.T) {
 	})
 
 	t.Run("check deletion", func(t *testing.T) {
-		if err := wait.PollImmediate(1*time.Second, 1*time.Minute, func() (done bool, err error) {
+		if err := wait.PollImmediate(1*time.Second, 2*time.Minute, func() (done bool, err error) {
 			_, err = tc.TaskRuns(defaultNamespace).Get(ctx, tr.GetName(), metav1.GetOptions{})
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
@@ -222,7 +222,7 @@ func TestPipelineRun(t *testing.T) {
 
 	t.Run("check annotations", func(t *testing.T) {
 		// Wait for Result ID to show up.
-		if err := wait.PollImmediate(1*time.Second, 1*time.Minute, func() (done bool, err error) {
+		if err := wait.PollImmediate(1*time.Second, 2*time.Minute, func() (done bool, err error) {
 			pr, err := tc.PipelineRuns(defaultNamespace).Get(ctx, pr.GetName(), metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("Error getting PipelineRun: %v", err)

@@ -27,6 +27,6 @@ patches:
 - target:
     version: v1
     kind: Service
-    name: tekton-results-api-service
+    name: tekton-results-api
     namespace: tekton-pipelines
   path: api-service.yaml

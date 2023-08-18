@@ -24,4 +24,4 @@ spec:
         - name: api
           env:
             - name: DB_HOST
-              value: tekton-results-postgres-service.tekton-pipelines.svc.cluster.local
+              value: tekton-results-postgres.tekton-pipelines.svc.cluster.local

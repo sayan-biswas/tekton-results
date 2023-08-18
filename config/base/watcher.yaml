@@ -38,7 +38,7 @@ spec:
           args:
             [
               "-api_addr",
-              "tekton-results-api-service.tekton-pipelines.svc.cluster.local:8080",
+              "tekton-results-api.tekton-pipelines.svc.cluster.local:8080",
               "-auth_mode",
               "token",
             ]
@@ -82,7 +82,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: watcher
+  name: watcher-metrics
   namespace: tekton-pipelines
   labels:
     app.kubernetes.io/name: tekton-results-watcher

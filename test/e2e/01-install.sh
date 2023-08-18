@@ -37,7 +37,7 @@ set +e
 mkdir -p "${SSL_CERT_PATH}"
 
 SSL_INCLUDE_LOCALHOST=${SSL_INCLUDE_LOCALHOST:-"false"}
-altNames="DNS:tekton-results-api-service.tekton-pipelines.svc.cluster.local"
+altNames="DNS:tekton-results-api.tekton-pipelines.svc.cluster.local"
 if [ "$SSL_INCLUDE_LOCALHOST" = "true" ] ; then
     altNames+=",DNS:localhost"
 fi
@@ -48,7 +48,7 @@ openssl req -x509 \
         -out "${SSL_CERT_PATH}/tekton-results-cert.pem" \
         -days 365 \
         -nodes \
-        -subj "/CN=tekton-results-api-service.tekton-pipelines.svc.cluster.local" \
+        -subj "/CN=tekton-results-api.tekton-pipelines.svc.cluster.local" \
         -addext "subjectAltName = ${altNames}"
 
 if [ $? -ne 0 ] ; then
@@ -64,7 +64,7 @@ if [ $? -ne 0 ] ; then
             -out "${SSL_CERT_PATH}/tekton-results-cert.pem" \
             -days 365 \
             -nodes \
-            -subj "/CN=tekton-results-api-service.tekton-pipelines.svc.cluster.local"
+            -subj "/CN=tekton-results-api.tekton-pipelines.svc.cluster.local"
 
     if [ $? -ne 0 ] ; then
         echo "There was an error generating certificates"
